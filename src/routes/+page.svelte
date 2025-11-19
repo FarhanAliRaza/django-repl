@@ -135,24 +135,26 @@
 
 		console.log(`Running Django with path: ${path}`);
 
-		executionState.startExecution();
+		// Don't clear logs on page navigation - preserve execution history
+		executionState.startExecution(false);
 
 		const files = $workspaceFiles;
 
 		// Save to localStorage
 		// workspaceFiles.saveToLocalStorage(files);
 
-		// Send files to worker with specific path
+		// Send files to worker with skipFileWrite=true for navigation only
 		worker.postMessage({
 			type: 'execute',
-			payload: { files, path }
+			payload: { files, path, skipFileWrite: true }
 		} as WorkerRequest);
 	}
 
 	function runCode() {
 		if (!worker || executionState.replState !== ReplState.IDLE) return;
 
-		executionState.startExecution();
+		// Clear logs on initial Run (not on refresh/navigation)
+		executionState.startExecution(true);
 
 		const files = $workspaceFiles;
 		const currentFileName = get(currentFile);
@@ -214,7 +216,8 @@
 		// Clear the lastFiles so it doesn't compare
 		lastFiles = {};
 
-		executionState.startExecution();
+		// Don't clear logs on refresh - preserve execution history
+		executionState.startExecution(false);
 
 		// Log what we're sending to worker - only views.py
 
@@ -222,7 +225,7 @@
 		executionState.addLog({
 			timestamp: Date.now(),
 			type: 'info',
-			message: '🔄 Force refreshing - re-running all code'
+			message: '🔄 Refreshing'
 		});
 
 		// Save to localStorage

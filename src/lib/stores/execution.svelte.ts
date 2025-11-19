@@ -33,10 +33,12 @@ class ExecutionState {
 		this.replState = ReplState.READY;
 	}
 
-	startExecution() {
+	startExecution(clearLogs: boolean = false) {
 		this.isExecuting = true;
 		this.replState = ReplState.RUNNING;
-		this.clearLogs();
+		if (clearLogs) {
+			this.clearLogs();
+		}
 	}
 
 	resetState() {

@@ -30,6 +30,7 @@ export interface WorkerRequest {
 		files?: Record<string, string>;
 		package?: string;
 		path?: string;
+		skipFileWrite?: boolean; // For navigation - only execute with new path
 	};
 }
 

@@ -156,20 +156,24 @@ output
 	}
 }
 
-async function executeDjangoView(files: Record<string, string>, viewPath: string = '/') {
+async function executeDjangoView(
+	files: Record<string, string>,
+	viewPath: string = '/',
+	skipFileWrite: boolean = false
+) {
 	try {
-		log('Setting up Django environment...', 'info');
-		log(`Received ${Object.keys(files).length} files to execute`, 'info');
+		if (!skipFileWrite) {
+			// Only rewrite files and clear caches on full refresh
+			log('Setting up Django environment...', 'info');
+			log(`Received ${Object.keys(files).length} files to execute`, 'info');
 
-		// Log views.py content snippet to verify it's the latest
+			// Write files to virtual FS
+			await writeFilesToVirtualFS(files);
 
-		// Write files to virtual FS
-		await writeFilesToVirtualFS(files);
+			log('Clearing Python module cache and Django caches...', 'info');
 
-		log('Clearing Python module cache and Django caches...', 'info');
-
-		// Clear the module cache to reload updated files
-		await pyodide.runPythonAsync(`
+			// Clear the module cache to reload updated files
+			await pyodide.runPythonAsync(`
 import sys
 import gc
 
@@ -199,6 +203,10 @@ except Exception as e:
 
 
 		`);
+		} else {
+			// Navigation only - just log the path change
+			log(`Navigating to ${viewPath}`, 'info');
+		}
 
 		log('Executing Django WSGI handler...', 'info');
 
@@ -407,7 +415,8 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 				if (payload?.files) {
 					// Execute Django project with optional path
 					const path = payload.path || '/';
-					const result = await executeDjangoView(payload.files, path);
+					const skipFileWrite = payload.skipFileWrite || false;
+					const result = await executeDjangoView(payload.files, path, skipFileWrite);
 					self.postMessage({
 						type: 'result',
 						payload: result
