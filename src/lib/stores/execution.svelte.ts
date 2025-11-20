@@ -1,4 +1,5 @@
-import type { ExecutionResult, LogEntry } from '$lib/types';
+import type { ExecutionResult, LogEntry, HttpCookies } from '$lib/types';
+import { CookieJar } from '@pyodide/http-adapter';
 
 export enum ReplState {
 	INITIALIZING = 'initializing',  // Python environment is loading
@@ -13,6 +14,15 @@ class ExecutionState {
 	executionResult = $state<ExecutionResult | null>(null);
 	logs = $state<LogEntry[]>([]);
 	isWorkerReady = $state(false);
+	cookieJar: CookieJar;
+
+	constructor() {
+		// Initialize cookie jar with localStorage persistence
+		this.cookieJar = new CookieJar(
+			'django-repl-cookies',
+			typeof localStorage !== 'undefined' ? localStorage : undefined
+		);
+	}
 
 	addLog(entry: LogEntry) {
 		this.logs = [...this.logs, entry];
@@ -20,6 +30,29 @@ class ExecutionState {
 
 	clearLogs() {
 		this.logs = [];
+	}
+
+	/**
+	 * Get all cookies as an object to send with requests
+	 */
+	getCookies(): HttpCookies {
+		return this.cookieJar.getAll();
+	}
+
+	/**
+	 * Process Set-Cookie headers from execution result
+	 */
+	processCookies(cookies: Array<{ name: string; value: string }>) {
+		for (const { name, value } of cookies) {
+			this.cookieJar.set(name, value);
+		}
+	}
+
+	/**
+	 * Clear all cookies (e.g., for logout)
+	 */
+	clearCookies() {
+		this.cookieJar.clear();
 	}
 
 	setWorkerReady() {
@@ -31,6 +64,11 @@ class ExecutionState {
 		this.executionResult = result;
 		this.isExecuting = false;
 		this.replState = ReplState.READY;
+
+		// Automatically process any cookies returned from the execution
+		if (result.cookies && result.cookies.length > 0) {
+			this.processCookies(result.cookies);
+		}
 	}
 
 	startExecution(clearLogs: boolean = false) {

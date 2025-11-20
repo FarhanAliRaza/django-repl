@@ -146,7 +146,12 @@
 		// Send files to worker with skipFileWrite=true for navigation only
 		worker.postMessage({
 			type: 'execute',
-			payload: { files, path, skipFileWrite: true }
+			payload: {
+				files,
+				path,
+				skipFileWrite: true,
+				cookies: executionState.getCookies()
+			}
 		} as WorkerRequest);
 	}
 
@@ -198,10 +203,14 @@
 		// Save to localStorage
 		// workspaceFiles.saveToLocalStorage(files);
 
-		// Send files to worker with current path
+		// Send files to worker with current path and cookies
 		worker.postMessage({
 			type: 'execute',
-			payload: { files, path: pathState.currentPath }
+			payload: {
+				files,
+				path: pathState.currentPath,
+				cookies: executionState.getCookies()
+			}
 		} as WorkerRequest);
 	}
 
@@ -231,10 +240,14 @@
 		// Save to localStorage
 		// workspaceFiles.saveToLocalStorage(files);
 
-		// Send files to worker with current path
+		// Send files to worker with current path and cookies
 		worker.postMessage({
 			type: 'execute',
-			payload: { files, path: pathState.currentPath }
+			payload: {
+				files,
+				path: pathState.currentPath,
+				cookies: executionState.getCookies()
+			}
 		} as WorkerRequest);
 	}
 </script>
