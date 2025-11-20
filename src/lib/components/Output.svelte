@@ -6,6 +6,14 @@
 	import { srcdocTemplate } from './srcdoc-template';
 	import * as Resizable from '$lib/components/ui/resizable/index.js';
 
+	interface Props {
+		onRunMigrations?: () => void;
+		onMakeMigrations?: () => void;
+		onCreateSuperuser?: () => void;
+	}
+
+	let { onRunMigrations, onMakeMigrations, onCreateSuperuser }: Props = $props();
+
 	let iframeElement = $state<HTMLIFrameElement | null>(null);
 	let iframeReady = $state(false);
 
@@ -112,7 +120,11 @@
 		</Resizable.Pane>
 		<Resizable.Handle withHandle={true} />
 		<Resizable.Pane defaultSize={30} minSize={20}>
-			<Console />
+			<Console
+				onRunMigrations={onRunMigrations}
+				onMakeMigrations={onMakeMigrations}
+				onCreateSuperuser={onCreateSuperuser}
+			/>
 		</Resizable.Pane>
 	</Resizable.PaneGroup>
 </div>

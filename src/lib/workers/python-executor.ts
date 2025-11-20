@@ -216,6 +216,9 @@ import sys
 import os
 from io import StringIO
 
+# Disable async mode for Django in Pyodide
+os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
+
 # Capture stdout and stderr
 old_stdout = sys.stdout
 old_stderr = sys.stderr
@@ -247,21 +250,42 @@ try:
             ROOT_URLCONF='urls',
             ALLOWED_HOSTS=['*'],
             INSTALLED_APPS=[
+                'django.contrib.admin',
                 'django.contrib.contenttypes',
                 'django.contrib.auth',
+                'django.contrib.sessions',
+                'django.contrib.messages',
+                'myapp',
             ],
-            MIDDLEWARE=[],
+            MIDDLEWARE=[
+                'django.middleware.security.SecurityMiddleware',
+                'django.contrib.sessions.middleware.SessionMiddleware',
+                'django.middleware.common.CommonMiddleware',
+                'django.middleware.csrf.CsrfViewMiddleware',
+                'django.contrib.auth.middleware.AuthenticationMiddleware',
+                'django.contrib.messages.middleware.MessageMiddleware',
+            ],
             DATABASES={
                 'default': {
                     'ENGINE': 'django.db.backends.sqlite3',
-                    'NAME': ':memory:',
+                    'NAME': 'db.sqlite3',
                 }
             },
+            PASSWORD_HASHERS=[
+                'django.contrib.auth.hashers.MD5PasswordHasher',
+            ],
             TEMPLATES=[{
                 'BACKEND': 'django.template.backends.django.DjangoTemplates',
                 'DIRS': [os.path.join(BASE_DIR, 'templates')],
-                'APP_DIRS': False,
-                'OPTIONS': {},
+                'APP_DIRS': True,
+                'OPTIONS': {
+                    'context_processors': [
+                        'django.template.context_processors.debug',
+                        'django.template.context_processors.request',
+                        'django.contrib.auth.context_processors.auth',
+                        'django.contrib.messages.context_processors.messages',
+                    ],
+                },
             }],
         )
         django.setup()
@@ -301,6 +325,37 @@ try:
     for chunk in result:
         if chunk:
             response_data['body'].append(chunk)
+
+    # Check if it's a redirect (status starts with 3)
+    status_code = int(response_data['status'].split()[0])
+    if 300 <= status_code < 400:
+        # Follow the redirect
+        location = None
+        for header_name, header_value in response_data['headers']:
+            if header_name.lower() == 'location':
+                location = header_value
+                break
+
+        if location:
+            # Create new environ for redirect
+            redirect_environ = environ.copy()
+            redirect_environ['PATH_INFO'] = location.split('?')[0]
+            if '?' in location:
+                redirect_environ['QUERY_STRING'] = location.split('?')[1]
+            else:
+                redirect_environ['QUERY_STRING'] = ''
+
+            # Execute again with new path
+            response_data = {
+                'status': None,
+                'headers': [],
+                'body': []
+            }
+
+            result = handler(redirect_environ, start_response)
+            for chunk in result:
+                if chunk:
+                    response_data['body'].append(chunk)
 
     # Get the HTML
     html_bytes = b''.join(response_data['body'])
@@ -444,6 +499,386 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 							logs: [...logs]
 						}
 					} as WorkerResponse);
+				}
+			}
+			break;
+
+		case 'runMigrations':
+			{
+				try {
+					log('Running Django migrations...', 'info');
+
+					const result = await pyodide.runPythonAsync(`
+import sys
+from io import StringIO
+import os
+
+# Disable async mode for Django in Pyodide
+os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
+
+# Capture stdout and stderr
+old_stdout = sys.stdout
+old_stderr = sys.stderr
+sys.stdout = StringIO()
+sys.stderr = StringIO()
+
+output = {
+    'stdout': '',
+    'stderr': '',
+    'error': None,
+    'success': False
+}
+
+try:
+    # Import Django management
+    import django
+    from django.conf import settings
+    from django.core.management import call_command
+
+    # Configure Django if not already configured
+    if not settings.configured:
+        BASE_DIR = os.getcwd()
+
+        settings.configure(
+            DEBUG=True,
+            SECRET_KEY='browser-django-playground-secret-key',
+            ROOT_URLCONF='urls',
+            ALLOWED_HOSTS=['*'],
+            INSTALLED_APPS=[
+                'django.contrib.admin',
+                'django.contrib.contenttypes',
+                'django.contrib.auth',
+                'django.contrib.sessions',
+                'django.contrib.messages',
+                'myapp',
+            ],
+            MIDDLEWARE=[
+                'django.middleware.security.SecurityMiddleware',
+                'django.contrib.sessions.middleware.SessionMiddleware',
+                'django.middleware.common.CommonMiddleware',
+                'django.middleware.csrf.CsrfViewMiddleware',
+                'django.contrib.auth.middleware.AuthenticationMiddleware',
+                'django.contrib.messages.middleware.MessageMiddleware',
+            ],
+            DATABASES={
+                'default': {
+                    'ENGINE': 'django.db.backends.sqlite3',
+                    'NAME': 'db.sqlite3',
+                }
+            },
+            PASSWORD_HASHERS=[
+                'django.contrib.auth.hashers.MD5PasswordHasher',
+            ],
+            TEMPLATES=[{
+                'BACKEND': 'django.template.backends.django.DjangoTemplates',
+                'DIRS': [os.path.join(BASE_DIR, 'templates')],
+                'APP_DIRS': True,
+                'OPTIONS': {
+                    'context_processors': [
+                        'django.template.context_processors.debug',
+                        'django.template.context_processors.request',
+                        'django.contrib.auth.context_processors.auth',
+                        'django.contrib.messages.context_processors.messages',
+                    ],
+                },
+            }],
+        )
+        django.setup()
+
+    # Run migrations
+    call_command('migrate', '--no-input', verbosity=2)
+    output['success'] = True
+
+except Exception as e:
+    import traceback
+    output['error'] = str(e)
+    output['stderr'] = traceback.format_exc()
+finally:
+    output['stdout'] = sys.stdout.getvalue()
+    output['stderr'] = sys.stderr.getvalue()
+
+    sys.stdout = old_stdout
+    sys.stderr = old_stderr
+
+output
+					`);
+
+					const stdout = result.get('stdout') || '';
+					const stderr = result.get('stderr') || '';
+					const error = result.get('error');
+					const success = result.get('success');
+
+					if (stdout) log(stdout, 'info');
+					if (stderr && !error) log(stderr, 'warning');
+
+					if (error) {
+						log(`Migration error: ${error}`, 'error');
+					} else {
+						log('Migrations completed successfully', 'success');
+					}
+
+					// Don't send result to avoid showing migration output in preview
+					// Migrations only show in console logs
+				} catch (error) {
+					log(`Failed to run migrations: ${error}`, 'error');
+				}
+			}
+			break;
+
+		case 'makeMigrations':
+			{
+				try {
+					log('Making migrations...', 'info');
+
+					const result = await pyodide.runPythonAsync(`
+import sys
+from io import StringIO
+import os
+
+# Disable async mode for Django in Pyodide
+os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
+
+# Capture stdout and stderr
+old_stdout = sys.stdout
+old_stderr = sys.stderr
+sys.stdout = StringIO()
+sys.stderr = StringIO()
+
+output = {
+    'stdout': '',
+    'stderr': '',
+    'error': None,
+    'success': False
+}
+
+try:
+    # Import Django management
+    import django
+    from django.conf import settings
+    from django.core.management import call_command
+
+    # Configure Django if not already configured
+    if not settings.configured:
+        BASE_DIR = os.getcwd()
+
+        settings.configure(
+            DEBUG=True,
+            SECRET_KEY='browser-django-playground-secret-key',
+            ROOT_URLCONF='urls',
+            ALLOWED_HOSTS=['*'],
+            INSTALLED_APPS=[
+                'django.contrib.admin',
+                'django.contrib.contenttypes',
+                'django.contrib.auth',
+                'django.contrib.sessions',
+                'django.contrib.messages',
+                'myapp',
+            ],
+            MIDDLEWARE=[
+                'django.middleware.security.SecurityMiddleware',
+                'django.contrib.sessions.middleware.SessionMiddleware',
+                'django.middleware.common.CommonMiddleware',
+                'django.middleware.csrf.CsrfViewMiddleware',
+                'django.contrib.auth.middleware.AuthenticationMiddleware',
+                'django.contrib.messages.middleware.MessageMiddleware',
+            ],
+            DATABASES={
+                'default': {
+                    'ENGINE': 'django.db.backends.sqlite3',
+                    'NAME': 'db.sqlite3',
+                }
+            },
+            PASSWORD_HASHERS=[
+                'django.contrib.auth.hashers.MD5PasswordHasher',
+            ],
+            TEMPLATES=[{
+                'BACKEND': 'django.template.backends.django.DjangoTemplates',
+                'DIRS': [os.path.join(BASE_DIR, 'templates')],
+                'APP_DIRS': True,
+                'OPTIONS': {
+                    'context_processors': [
+                        'django.template.context_processors.debug',
+                        'django.template.context_processors.request',
+                        'django.contrib.auth.context_processors.auth',
+                        'django.contrib.messages.context_processors.messages',
+                    ],
+                },
+            }],
+        )
+        django.setup()
+
+    # Make migrations
+    call_command('makemigrations', verbosity=2)
+    output['success'] = True
+
+except Exception as e:
+    import traceback
+    output['error'] = str(e)
+    output['stderr'] = traceback.format_exc()
+finally:
+    output['stdout'] = sys.stdout.getvalue()
+    output['stderr'] = sys.stderr.getvalue()
+
+    sys.stdout = old_stdout
+    sys.stderr = old_stderr
+
+output
+					`);
+
+					const stdout = result.get('stdout') || '';
+					const stderr = result.get('stderr') || '';
+					const error = result.get('error');
+
+					if (stdout) log(stdout, 'info');
+					if (stderr && !error) log(stderr, 'warning');
+
+					if (error) {
+						log(`Make migrations error: ${error}`, 'error');
+					} else {
+						log('Make migrations completed', 'success');
+					}
+
+					// Don't send result to avoid showing output in preview
+				} catch (error) {
+					log(`Failed to make migrations: ${error}`, 'error');
+				}
+			}
+			break;
+
+		case 'createSuperuser':
+			{
+				try {
+					const username = payload?.username || 'admin';
+					const email = payload?.email || 'admin@example.com';
+					const password = payload?.password || 'admin';
+
+					log(`Creating superuser: ${username}`, 'info');
+
+					const result = await pyodide.runPythonAsync(`
+import sys
+from io import StringIO
+import os
+
+# Disable async mode for Django in Pyodide
+os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
+
+# Capture stdout and stderr
+old_stdout = sys.stdout
+old_stderr = sys.stderr
+sys.stdout = StringIO()
+sys.stderr = StringIO()
+
+output = {
+    'stdout': '',
+    'stderr': '',
+    'error': None,
+    'success': False
+}
+
+try:
+    # Import Django
+    import django
+    from django.conf import settings
+    from django.contrib.auth import get_user_model
+
+    # Configure Django if not already configured
+    if not settings.configured:
+        BASE_DIR = os.getcwd()
+
+        settings.configure(
+            DEBUG=True,
+            SECRET_KEY='browser-django-playground-secret-key',
+            ROOT_URLCONF='urls',
+            ALLOWED_HOSTS=['*'],
+            INSTALLED_APPS=[
+                'django.contrib.admin',
+                'django.contrib.contenttypes',
+                'django.contrib.auth',
+                'django.contrib.sessions',
+                'django.contrib.messages',
+                'myapp',
+            ],
+            MIDDLEWARE=[
+                'django.middleware.security.SecurityMiddleware',
+                'django.contrib.sessions.middleware.SessionMiddleware',
+                'django.middleware.common.CommonMiddleware',
+                'django.middleware.csrf.CsrfViewMiddleware',
+                'django.contrib.auth.middleware.AuthenticationMiddleware',
+                'django.contrib.messages.middleware.MessageMiddleware',
+            ],
+            DATABASES={
+                'default': {
+                    'ENGINE': 'django.db.backends.sqlite3',
+                    'NAME': 'db.sqlite3',
+                }
+            },
+            PASSWORD_HASHERS=[
+                'django.contrib.auth.hashers.MD5PasswordHasher',
+            ],
+            TEMPLATES=[{
+                'BACKEND': 'django.template.backends.django.DjangoTemplates',
+                'DIRS': [os.path.join(BASE_DIR, 'templates')],
+                'APP_DIRS': True,
+                'OPTIONS': {
+                    'context_processors': [
+                        'django.template.context_processors.debug',
+                        'django.template.context_processors.request',
+                        'django.contrib.auth.context_processors.auth',
+                        'django.contrib.messages.context_processors.messages',
+                    ],
+                },
+            }],
+        )
+        django.setup()
+
+    # Create superuser
+    User = get_user_model()
+
+    # Check if user already exists
+    if User.objects.filter(username='${username}').exists():
+        print(f"User '${username}' already exists")
+        output['success'] = False
+    else:
+        user = User.objects.create_superuser(
+            username='${username}',
+            email='${email}',
+            password='${password}'
+        )
+        print(f"Superuser created successfully: ${username}")
+        print(f"Username: ${username}")
+        print(f"Password: ${password}")
+        output['success'] = True
+
+except Exception as e:
+    import traceback
+    output['error'] = str(e)
+    output['stderr'] = traceback.format_exc()
+finally:
+    output['stdout'] = sys.stdout.getvalue()
+    output['stderr'] = sys.stderr.getvalue()
+
+    sys.stdout = old_stdout
+    sys.stderr = old_stderr
+
+output
+					`);
+
+					const stdout = result.get('stdout') || '';
+					const stderr = result.get('stderr') || '';
+					const error = result.get('error');
+
+					if (stdout) log(stdout, 'info');
+					if (stderr && !error) log(stderr, 'warning');
+
+					if (error) {
+						log(`Create superuser error: ${error}`, 'error');
+					} else {
+						log('Superuser created successfully', 'success');
+					}
+
+					// Don't send result to avoid showing output in preview
+				} catch (error) {
+					log(`Failed to create superuser: ${error}`, 'error');
 				}
 			}
 			break;

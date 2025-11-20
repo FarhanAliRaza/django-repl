@@ -237,6 +237,53 @@
 			payload: { files, path: pathState.currentPath }
 		} as WorkerRequest);
 	}
+
+	function runMigrations() {
+		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+
+		executionState.addLog({
+			timestamp: Date.now(),
+			type: 'info',
+			message: 'Running migrations...'
+		});
+
+		worker.postMessage({
+			type: 'runMigrations'
+		} as WorkerRequest);
+	}
+
+	function makeMigrations() {
+		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+
+		executionState.addLog({
+			timestamp: Date.now(),
+			type: 'info',
+			message: 'Making migrations...'
+		});
+
+		worker.postMessage({
+			type: 'makeMigrations'
+		} as WorkerRequest);
+	}
+
+	function createSuperuser() {
+		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+
+		executionState.addLog({
+			timestamp: Date.now(),
+			type: 'info',
+			message: 'Creating superuser (admin/admin)...'
+		});
+
+		worker.postMessage({
+			type: 'createSuperuser',
+			payload: {
+				username: 'admin',
+				email: 'admin@example.com',
+				password: 'admin'
+			}
+		} as WorkerRequest);
+	}
 </script>
 
 <div class="playground">
@@ -312,7 +359,11 @@
 			<Resizable.Handle withHandle={true} />
 			<Resizable.Pane defaultSize={50}>
 				<div class="right-pane">
-					<Output />
+					<Output
+						onRunMigrations={runMigrations}
+						onMakeMigrations={makeMigrations}
+						onCreateSuperuser={createSuperuser}
+					/>
 				</div>
 			</Resizable.Pane>
 		</Resizable.PaneGroup>

@@ -35,12 +35,22 @@ DEBUG = True
 ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
+    'django.contrib.admin',
     'django.contrib.contenttypes',
     'django.contrib.auth',
+    'django.contrib.sessions',
+    'django.contrib.messages',
     'myapp',
 ]
 
-MIDDLEWARE = []
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+]
 
 ROOT_URLCONF = 'myproject.urls'
 
@@ -63,9 +73,13 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',
+        'NAME': 'db.sqlite3',
     }
 }
+
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.MD5PasswordHasher',
+]
 
 LANGUAGE_CODE = 'en-us'
 
@@ -78,9 +92,11 @@ USE_TZ = True
 STATIC_URL = '/static/'
 `,
 
-	'myproject/urls.py': `from django.urls import path, include
+	'myproject/urls.py': `from django.contrib import admin
+from django.urls import path, include
 
 urlpatterns = [
+    path('admin/', admin.site.urls),
     path('', include('myapp.urls')),
 ]
 `,
@@ -99,6 +115,16 @@ application = get_wsgi_application()
 `,
 
 	'myapp/__init__.py': '',
+
+	'myapp/models.py': `from django.db import models
+
+# Create your models here.
+`,
+
+	'myapp/admin.py': `from django.contrib import admin
+
+# Register your models here.
+`,
 
 	'myapp/views.py': `from django.http import HttpResponse
 from django.shortcuts import render
@@ -131,7 +157,10 @@ def index(request):
             <h1 style="margin-top: 0; color: #1a202c; font-size: 2em;">Django Playground</h1>
             <p style="color: #4a5568; line-height: 1.6;">Django running in your browser using Pyodide. Edit the code and see changes instantly!</p>
             <p style="color: #4a5568; line-height: 1.6;">Try modifying <strong>myapp/views.py</strong> to change this page!</p>
-            <p style="color: #4a5568; line-height: 1.6;"><a href="/about/" style="color: #0066cc; text-decoration: none;">go to about page</a></p>
+            <p style="color: #4a5568; line-height: 1.6;">
+                <a href="/about/" style="color: #0066cc; text-decoration: none;">About</a> |
+                <a href="/admin/" style="color: #0066cc; text-decoration: none;">Admin</a>
+            </p>
 
             <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; color: #718096;">
                 Built with ❤️ by <a href="https://www.linkedin.com/in/farhanaliraza" target="_blank" style="color: #0066cc; text-decoration: none;">Farhan Ali Raza</a>
@@ -202,7 +231,13 @@ urlpatterns = [
 `,
 
 	'urls.py': `# Root URL configuration (used by worker)
-from myapp.urls import urlpatterns
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', include('myapp.urls')),
+]
 `
 };
 

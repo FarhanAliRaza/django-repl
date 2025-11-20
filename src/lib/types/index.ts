@@ -24,13 +24,23 @@ export interface LogEntry {
 
 // Worker message types
 export interface WorkerRequest {
-	type: 'init' | 'execute' | 'installPackage' | 'writeFiles';
+	type:
+		| 'init'
+		| 'execute'
+		| 'installPackage'
+		| 'writeFiles'
+		| 'runMigrations'
+		| 'makeMigrations'
+		| 'createSuperuser';
 	payload?: {
 		code?: string;
 		files?: Record<string, string>;
 		package?: string;
 		path?: string;
 		skipFileWrite?: boolean; // For navigation - only execute with new path
+		username?: string;
+		email?: string;
+		password?: string;
 	};
 }
 
