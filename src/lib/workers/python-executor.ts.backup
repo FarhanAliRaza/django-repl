@@ -214,22 +214,11 @@ except Exception as e:
 
 		log('Executing Django WSGI handler...', 'info');
 
-		// Serialize body to string
-		const bodyStr = typeof body === 'object' ? new URLSearchParams(body as Record<string, string>).toString() : String(body || '');
-		const contentLength = new TextEncoder().encode(bodyStr).length;
-		const contentType = headers['Content-Type'] || headers['content-type'] ||
-			(method === 'POST' ? 'application/x-www-form-urlencoded' : '');
-
-		// Build cookie header from cookies object
-		const cookieHeader = Object.entries(cookies)
-			.map(([name, value]) => `${name}=${value}`)
-			.join('; ');
-
 		// Execute Django and get HTML output
 		const result = await pyodide.runPythonAsync(`
 import sys
 import os
-from io import StringIO, BytesIO
+from io import StringIO
 
 # Capture stdout and stderr
 old_stdout = sys.stdout
@@ -242,8 +231,7 @@ output = {
     'stderr': '',
     'error': None,
     'html': None,
-    'status': None,
-    'headers': []
+    'status': None
 }
 
 try:
@@ -263,20 +251,10 @@ try:
             ROOT_URLCONF='urls',
             ALLOWED_HOSTS=['*'],
             INSTALLED_APPS=[
-                'django.contrib.admin',
                 'django.contrib.contenttypes',
                 'django.contrib.auth',
-                'django.contrib.sessions',
-                'django.contrib.messages',
             ],
-            MIDDLEWARE=[
-                'django.middleware.security.SecurityMiddleware',
-                'django.contrib.sessions.middleware.SessionMiddleware',
-                'django.middleware.common.CommonMiddleware',
-                'django.middleware.csrf.CsrfViewMiddleware',
-                'django.contrib.auth.middleware.AuthenticationMiddleware',
-                'django.contrib.messages.middleware.MessageMiddleware',
-            ],
+            MIDDLEWARE=[],
             DATABASES={
                 'default': {
                     'ENGINE': 'django.db.backends.sqlite3',
@@ -286,38 +264,27 @@ try:
             TEMPLATES=[{
                 'BACKEND': 'django.template.backends.django.DjangoTemplates',
                 'DIRS': [os.path.join(BASE_DIR, 'templates')],
-                'APP_DIRS': True,
-                'OPTIONS': {
-                    'context_processors': [
-                        'django.template.context_processors.debug',
-                        'django.template.context_processors.request',
-                        'django.contrib.auth.context_processors.auth',
-                        'django.contrib.messages.context_processors.messages',
-                    ],
-                },
+                'APP_DIRS': False,
+                'OPTIONS': {},
             }],
         )
         django.setup()
 
     # Create WSGI environ
     environ = {
-        'REQUEST_METHOD': '${method}',
+        'REQUEST_METHOD': 'GET',
         'PATH_INFO': '${viewPath}',
         'QUERY_STRING': '',
-        'CONTENT_TYPE': '${contentType}',
-        'CONTENT_LENGTH': '${contentLength}',
         'SERVER_NAME': 'localhost',
         'SERVER_PORT': '8000',
         'SERVER_PROTOCOL': 'HTTP/1.1',
-        'SCRIPT_NAME': '',
         'wsgi.version': (1, 0),
         'wsgi.url_scheme': 'http',
-        'wsgi.input': BytesIO('''${bodyStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'''.encode('utf-8')),
+        'wsgi.input': StringIO(''),
         'wsgi.errors': sys.stderr,
         'wsgi.multithread': False,
         'wsgi.multiprocess': False,
         'wsgi.run_once': False,
-        ${ cookieHeader ? `'HTTP_COOKIE': '${cookieHeader.replace(/'/g, "\\'")}',` : '' }
     }
 
     # Execute WSGI handler
@@ -329,34 +296,20 @@ try:
         'body': []
     }
 
-    def start_response(status, headers, exc_info=None):
-        if exc_info:
-            try:
-                if response_data['headers']:
-                    raise exc_info[1].with_traceback(exc_info[2])
-            finally:
-                exc_info = None
-        elif response_data['headers']:
-            raise RuntimeError("Response already started")
-
+    def start_response(status, headers):
         response_data['status'] = status
         response_data['headers'] = headers
         return lambda data: response_data['body'].append(data)
 
     result = handler(environ, start_response)
-    try:
-        for chunk in result:
-            if chunk:
-                response_data['body'].append(chunk)
-    finally:
-        if hasattr(result, 'close'):
-            result.close()
+    for chunk in result:
+        if chunk:
+            response_data['body'].append(chunk)
 
     # Get the HTML
     html_bytes = b''.join(response_data['body'])
     output['html'] = html_bytes.decode('utf-8')
     output['status'] = response_data['status']
-    output['headers'] = response_data['headers']
 
 except Exception as e:
     import traceback
@@ -377,22 +330,6 @@ output
 		const error = result.get('error');
 		const html = result.get('html');
 		const status = result.get('status');
-		const pyHeaders = result.toJs().get('headers') || [];
-
-		// Extract Set-Cookie headers
-		const cookiesToSet: Array<{ name: string; value: string }> = [];
-		for (const [name, value] of pyHeaders) {
-			if (name.toLowerCase() === 'set-cookie') {
-				// Parse cookie name/value from Set-Cookie header
-				const parts = value.split(';')[0].split('=');
-				if (parts.length >= 2) {
-					cookiesToSet.push({
-						name: parts[0].trim(),
-						value: parts.slice(1).join('=').trim()
-					});
-				}
-			}
-		}
 
 		if (stdout) log(stdout, 'info');
 		if (stderr && !error) log(stderr, 'warning');
@@ -413,7 +350,6 @@ output
 			success: true,
 			output: stdout,
 			html: html || undefined,
-			cookies: cookiesToSet,
 			logs: [...logs]
 		};
 	} catch (error) {
@@ -484,20 +420,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 					// Execute Django project with optional path
 					const path = payload.path || '/';
 					const skipFileWrite = payload.skipFileWrite || false;
-					const method = payload.method || 'GET';
-					const headers = payload.headers || {};
-					const body = payload.body || '';
-					const cookies = payload.cookies || {};
-
-					const result = await executeDjangoView(
-						payload.files,
-						path,
-						skipFileWrite,
-						method,
-						headers,
-						body,
-						cookies
-					);
+					const result = await executeDjangoView(payload.files, path, skipFileWrite);
 					self.postMessage({
 						type: 'result',
 						payload: result

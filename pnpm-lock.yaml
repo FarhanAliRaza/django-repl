@@ -32,6 +32,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.38.8
         version: 6.38.8
+      '@pyodide/http-adapter':
+        specifier: link:packages/pyodide-http
+        version: link:packages/pyodide-http
       codemirror:
         specifier: ^6.0.2
         version: 6.0.2

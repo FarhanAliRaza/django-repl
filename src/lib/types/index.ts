@@ -7,6 +7,17 @@ export interface FileNode {
 	children?: FileNode[];
 }
 
+// HTTP types
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
+
+export interface HttpHeaders {
+	[key: string]: string;
+}
+
+export interface HttpCookies {
+	[key: string]: string;
+}
+
 // Execution types
 export interface ExecutionResult {
 	success: boolean;
@@ -14,6 +25,7 @@ export interface ExecutionResult {
 	error?: string;
 	html?: string;
 	logs: LogEntry[];
+	cookies?: Array<{ name: string; value: string }>; // Cookies to set
 }
 
 export interface LogEntry {
@@ -31,6 +43,10 @@ export interface WorkerRequest {
 		package?: string;
 		path?: string;
 		skipFileWrite?: boolean; // For navigation - only execute with new path
+		method?: HttpMethod; // HTTP method for the request
+		headers?: HttpHeaders; // HTTP headers
+		body?: string | Record<string, any>; // Request body (POST data)
+		cookies?: HttpCookies; // Cookies to send with request
 	};
 }
 
