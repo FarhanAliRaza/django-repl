@@ -1,0 +1,54 @@
+{
+  "name": "@pyodide/http-adapter",
+  "version": "0.1.0",
+  "description": "WSGI and ASGI adapter for running Python web frameworks (Django, Flask) in the browser with Pyodide",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./wsgi": {
+      "import": "./dist/wsgi/index.js",
+      "types": "./dist/wsgi/index.d.ts"
+    },
+    "./asgi": {
+      "import": "./dist/asgi/index.js",
+      "types": "./dist/asgi/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "pnpm run build"
+  },
+  "keywords": [
+    "pyodide",
+    "wsgi",
+    "asgi",
+    "django",
+    "flask",
+    "python",
+    "webassembly",
+    "browser"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/pyodide-http-adapter.git"
+  },
+  "peerDependencies": {
+    "pyodide": "^0.26.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "pyodide": "^0.26.4"
+  }
+}
