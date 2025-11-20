@@ -299,6 +299,22 @@ try:
         )
         django.setup()
 
+        # Run migrations and create superuser (only once per session)
+        from django.core.management import call_command
+        from django.contrib.auth import get_user_model
+
+        try:
+            # Run migrations to create tables
+            call_command('migrate', '--run-syncdb', verbosity=0)
+
+            # Create superuser if it doesn't exist
+            User = get_user_model()
+            if not User.objects.filter(username='admin').exists():
+                User.objects.create_superuser('admin', 'admin@example.com', 'admin123')
+        except Exception as e:
+            # Ignore errors if already run
+            pass
+
     # Create WSGI environ
     environ = {
         'REQUEST_METHOD': '${method}',

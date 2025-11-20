@@ -78,9 +78,11 @@ USE_TZ = True
 STATIC_URL = '/static/'
 `,
 
-	'myproject/urls.py': `from django.urls import path, include
+	'myproject/urls.py': `from django.contrib import admin
+from django.urls import path, include
 
 urlpatterns = [
+    path('admin/', admin.site.urls),
     path('', include('myapp.urls')),
 ]
 `,
@@ -131,7 +133,15 @@ def index(request):
             <h1 style="margin-top: 0; color: #1a202c; font-size: 2em;">Django Playground</h1>
             <p style="color: #4a5568; line-height: 1.6;">Django running in your browser using Pyodide. Edit the code and see changes instantly!</p>
             <p style="color: #4a5568; line-height: 1.6;">Try modifying <strong>myapp/views.py</strong> to change this page!</p>
-            <p style="color: #4a5568; line-height: 1.6;"><a href="/about/" style="color: #0066cc; text-decoration: none;">go to about page</a></p>
+            <p style="color: #4a5568; line-height: 1.6;">
+                <a href="/about/" style="color: #0066cc; text-decoration: none; margin-right: 15px;">About</a>
+                <a href="/admin/" style="color: #0066cc; text-decoration: none;">Admin Panel</a>
+            </p>
+            <div style="background: #f0f4f8; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                <p style="margin: 0; color: #2d3748; font-size: 14px;">
+                    <strong>Admin Login:</strong> username: <code>admin</code> | password: <code>admin123</code>
+                </p>
+            </div>
 
             <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; color: #718096;">
                 Built with ❤️ by <a href="https://www.linkedin.com/in/farhanaliraza" target="_blank" style="color: #0066cc; text-decoration: none;">Farhan Ali Raza</a>
