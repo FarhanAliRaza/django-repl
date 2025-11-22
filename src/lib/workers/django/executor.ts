@@ -1,6 +1,7 @@
 import { log, getLogs } from '../logger';
 import { getPyodide } from '../pyodide-manager';
 import { writeFilesToVirtualFS } from '../filesystem';
+import { inlineStaticFiles } from '../static-file-processor';
 import type { ExecutionResult } from '$lib/types';
 
 export async function executePython(code: string): Promise<ExecutionResult> {
@@ -75,7 +76,8 @@ export async function executeDjangoView(
 	method: string = 'GET',
 	headers: Record<string, string> = {},
 	body: string | Record<string, any> = '',
-	cookies: Record<string, string> = {}
+	cookies: Record<string, string> = {},
+	isStaticFileRequest: boolean = false
 ): Promise<ExecutionResult> {
 	const pyodide = getPyodide();
 	if (!pyodide) {
@@ -184,6 +186,7 @@ try:
     import django
     from django.conf import settings
     from django.core.handlers.wsgi import WSGIHandler
+    from django.contrib.staticfiles.handlers import StaticFilesHandler
     import os
 
     # Force synchronous mode for Django ORM operations
@@ -232,8 +235,9 @@ try:
         ${cookieHeader ? `'HTTP_COOKIE': '${cookieHeader.replace(/'/g, "\\'")}',` : ''}
     }
 
-    # Execute WSGI handler
-    handler = WSGIHandler()
+    # Execute WSGI handler with static files support
+    # StaticFilesHandler wraps WSGIHandler to serve static files in development
+    handler = StaticFilesHandler(WSGIHandler())
 
     response_data = {
         'status': None,
@@ -291,9 +295,10 @@ output
 		const status = result.get('status');
 		const pyHeaders = result.toJs().get('headers') || [];
 
-		// Extract Set-Cookie headers and Location header (for redirects)
+		// Extract Set-Cookie headers, Location header (for redirects), and Content-Type
 		const cookiesToSet: Array<{ name: string; value: string }> = [];
 		let redirectLocation: string | undefined;
+		let responseContentType: string | undefined;
 
 		for (const [name, value] of pyHeaders) {
 			if (name.toLowerCase() === 'set-cookie') {
@@ -307,6 +312,8 @@ output
 				}
 			} else if (name.toLowerCase() === 'location') {
 				redirectLocation = value;
+			} else if (name.toLowerCase() === 'content-type') {
+				responseContentType = value;
 			}
 		}
 
@@ -325,10 +332,29 @@ output
 
 		log(`Django view executed successfully (${status})`, 'success');
 
+		// If this is a static file request, return it with appropriate metadata
+		if (isStaticFileRequest) {
+			return {
+				success: true,
+				output: html || '', // For static files, content is in html
+				isStaticFile: true,
+				requestedPath: viewPath,
+				contentType: responseContentType || 'text/plain',
+				logs: getLogs()
+			};
+		}
+
+		// Process HTML to inline static files before returning
+		let processedHtml = html;
+		if (html && responseContentType?.includes('text/html')) {
+			log('Processing HTML to inline static files...', 'info');
+			processedHtml = await inlineStaticFiles(html);
+		}
+
 		return {
 			success: true,
 			output: stdout,
-			html: html || undefined,
+			html: processedHtml || undefined,
 			cookies: cookiesToSet,
 			status: status || undefined,
 			redirectTo: redirectLocation,

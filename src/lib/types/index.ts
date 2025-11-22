@@ -28,6 +28,9 @@ export interface ExecutionResult {
 	cookies?: Array<{ name: string; value: string }>; // Cookies to set
 	status?: string; // HTTP status code (e.g., "200 OK", "302 Found")
 	redirectTo?: string; // Location header for redirects
+	isStaticFile?: boolean; // True if this is a static file response
+	requestedPath?: string; // The path that was requested
+	contentType?: string; // Content-Type header for static files
 }
 
 export interface LogEntry {
@@ -56,6 +59,7 @@ export interface WorkerRequest {
 		headers?: HttpHeaders; // HTTP headers
 		body?: string | Record<string, any>; // Request body (POST data)
 		cookies?: HttpCookies; // Cookies to send with request
+		isStaticFileRequest?: boolean; // True if requesting a static file
 		username?: string;
 		email?: string;
 		password?: string;
@@ -64,7 +68,7 @@ export interface WorkerRequest {
 
 export interface WorkerResponse {
 	type: 'ready' | 'result' | 'error' | 'log';
-	payload?: ExecutionResult | LogEntry | { message: string };
+	payload?: ExecutionResult | LogEntry | { message: string } | { success: boolean };
 }
 
 // Django project structure

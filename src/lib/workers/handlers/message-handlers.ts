@@ -51,6 +51,7 @@ export async function handleExecute(payload: WorkerRequest['payload']): Promise<
 		const headers = payload.headers || {};
 		const body = payload.body || '';
 		const cookies = payload.cookies || {};
+		const isStaticFileRequest = payload.isStaticFileRequest || false;
 
 		const result = await executeDjangoView(
 			payload.files,
@@ -59,7 +60,8 @@ export async function handleExecute(payload: WorkerRequest['payload']): Promise<
 			method,
 			headers,
 			body,
-			cookies
+			cookies,
+			isStaticFileRequest
 		);
 		return {
 			type: 'result',
