@@ -4,199 +4,142 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**dj-playground** is a Django Playground application that runs Django entirely in the browser using Pyodide (Python in WebAssembly). Built with SvelteKit 2, it provides an IDE-like interface with a file tree, code editor, and live preview.
+Django Playground is an experimental browser-based IDE that runs Django using Pyodide (Python in WebAssembly). It allows users to write Django code in the browser and see it execute client-side without any backend server.
 
-## Development Commands
+## Tech Stack
 
-### Running the Application
+- **Frontend**: SvelteKit 2 + Svelte 5 (with runes)
+- **Python Runtime**: Pyodide v0.26.4 (WebAssembly)
+- **Code Editor**: CodeMirror 6
+- **Styling**: Tailwind CSS v4
+- **Testing**: Vitest (unit + browser tests) + Playwright (e2e)
+- **Build Tool**: Vite 7
+
+## Commands
+
+### Development
 ```bash
-pnpm run dev              # Start development server
-pnpm run dev -- --open    # Start dev server and open browser
-pnpm run build            # Create production build
-pnpm run preview          # Preview production build
+pnpm run dev          # Start dev server on localhost:5173
+pnpm run build        # Production build
+pnpm run preview      # Preview production build
 ```
 
 ### Testing
 ```bash
-pnpm run test             # Run all tests (E2E + unit)
-pnpm run test:unit        # Run unit tests with Vitest
-pnpm run test:e2e         # Run E2E tests with Playwright
-
-# Unit test development
-pnpm run test:unit -- --watch  # Watch mode for unit tests
+pnpm run test         # Run all tests (e2e + unit)
+pnpm run test:unit    # Unit tests only (runs with vitest)
+pnpm run test:e2e     # E2E tests only (runs with Playwright)
 ```
 
 ### Code Quality
 ```bash
-pnpm run check            # Type check with svelte-check
-pnpm run check:watch      # Type check in watch mode
-pnpm run lint             # Check formatting and lint
-pnpm run format           # Format code with Prettier
+pnpm run lint         # Check code formatting with Prettier + ESLint
+pnpm run format       # Format code with Prettier
+pnpm run check        # TypeScript + Svelte type checking
+pnpm run check:watch  # Type checking in watch mode
 ```
 
 ## Architecture
 
-### Core Technologies
-- **SvelteKit 2** - Meta-framework with file-based routing
-- **Svelte 5** - Reactive UI framework
-- **Pyodide** - Python runtime in WebAssembly
-- **CodeMirror 6** - Code editor with Python support
-- **Tailwind CSS v4** - Utility-first styling
-- **Web Workers** - Python execution in dedicated thread
+### Core Components
 
-### Directory Structure
+1. **Web Worker Architecture** (`src/lib/workers/`)
+   - `python-executor.ts` - Main worker entry point, message handler routing
+   - `pyodide-manager.ts` - Manages Pyodide initialization and package installation
+   - `django/executor.ts` - Executes Django views via WSGI handler
+   - `django/management.ts` - Django management commands (migrate, makemigrations, createsuperuser)
+   - `filesystem.ts` - Virtual filesystem operations for Pyodide
+   - `static-file-processor.ts` - Inlines static files into HTML responses
+   - `handlers/message-handlers.ts` - Worker message type handlers
+
+2. **State Management** (`src/lib/stores/`)
+   - `workspace.ts` - File management store with default Django project template
+   - `execution.svelte.ts` - Execution state using Svelte 5 runes
+   - `path-state.svelte.ts` - Navigation/path state management
+
+3. **UI Components** (`src/lib/components/`)
+   - `Editor.svelte` - CodeMirror-based Python editor
+   - `Output.svelte` - Preview iframe with sandboxed Django output
+   - `FileTree.svelte` - File explorer tree view
+   - `Console.svelte` - Log output display
+   - `AddressBar.svelte` - URL navigation bar
+   - `ui/` - Shared UI components (buttons, resizable panes)
+
+### Communication Flow
+
 ```
-src/
-├── routes/              # SvelteKit routes (file-based routing)
-│   ├── +page.svelte    # Main application page
-│   └── +layout.svelte  # Root layout wrapper
-├── lib/
-│   ├── components/     # Reusable Svelte components
-│   │   ├── Editor.svelte     # CodeMirror-based code editor
-│   │   ├── FileTree.svelte   # File explorer tree
-│   │   ├── Output.svelte     # Preview/Console tabs
-│   │   └── Console.svelte    # Log display
-│   ├── stores/         # State management
-│   │   ├── workspace.ts          # File management & persistence (Svelte 4 stores)
-│   │   └── execution.svelte.ts   # Execution state & logs (Svelte 5 class-based state)
-│   ├── workers/        # Web Workers
-│   │   └── python-executor.ts  # Pyodide runner for Django
-│   └── types/          # TypeScript type definitions
+User Action � Svelte Component � Worker Message � Pyodide Execution � Worker Response � UI Update
 ```
 
-### State Management Pattern
+1. User edits code in CodeMirror editor
+2. Files stored in `workspaceFiles` store
+3. On execution, files sent to Web Worker via `WorkerRequest`
+4. Worker writes files to Pyodide's virtual FS
+5. Django WSGI handler executed with HTTP request simulation
+6. HTML response returned via `WorkerResponse`
+7. Output rendered in sandboxed iframe
 
-The application uses **Svelte 5 runes** for reactive state:
+### Key Technical Details
 
-1. **workspace.ts** - Manages all Django project files (Svelte 4 stores - to be migrated)
-   - Persists to localStorage
-   - Provides `workspaceFiles`, `fileTree`, and `currentFile` stores
-   - Default Django project template included
+- **Django Execution**: Uses `StaticFilesHandler(WSGIHandler())` to simulate Django dev server
+- **Module Cache**: Clears Python module cache on file writes to reload changed modules
+- **Cookie/Session Management**: Simulates browser cookies by passing them through WSGI environ
+- **Static Files**: Inlined into HTML using base64 encoding for CSS/JS/images
+- **Migrations**: Auto-runs migrations and creates superuser (admin/admin) on first init
+- **Virtual FS**: All Django project files stored in Pyodide's emscripten filesystem
 
-2. **execution.svelte.ts** - Manages execution state using **Svelte 5 class-based state**
-   - Global singleton instance: `executionState`
-   - State properties: `isExecuting`, `executionResult`, `logs`, `isWorkerReady`
-   - Methods: `addLog()`, `clearLogs()`, `setExecutionResult()`, `startExecution()`
-   - Uses `$state()` rune for reactivity
-   - Must have `.svelte.ts` extension to use runes
+### Worker Message Types
 
-### Python Execution Flow
-
-1. User clicks "Run" → `startExecution()` clears logs and sets `isExecuting = true`
-2. Main page sends all files to Web Worker via `postMessage()`
-3. Worker (`python-executor.ts`) writes files to Pyodide virtual filesystem
-4. Worker executes Django WSGI handler
-5. Worker returns HTML output and logs via `postMessage()`
-6. UI updates reactively from store changes
-
-### Web Worker Protocol
-
-Messages sent to `python-executor.ts`:
-- `init` - Initialize Pyodide environment
-- `execute` - Run Django view or Python code
-- `installPackage` - Install Python package via micropip
-- `writeFiles` - Write files to virtual filesystem
-
-Responses from worker:
-- `ready` - Pyodide initialized
-- `result` - Execution result with HTML/data
-- `error` - Execution error
-- `log` - Console log entry
-
-## Testing Strategy
-
-### Dual Testing Setup (Vitest)
-
-The project uses **two test projects** configured in `vite.config.ts`:
-
-1. **Client tests** (browser environment)
-   - Pattern: `src/**/*.svelte.{test,spec}.{js,ts}`
-   - Uses `@vitest/browser-playwright` with Chromium
-   - For testing Svelte components
-
-2. **Server tests** (Node environment)
-   - Pattern: `src/**/*.{test,spec}.{js,ts}` (excluding `.svelte.*`)
-   - For testing utilities, stores, and logic
-
-### Writing Tests
-
-**Svelte Component Tests:**
 ```typescript
-// Use .svelte.spec.ts extension
-import { render } from 'vitest-browser-svelte';
-import { expect, it } from 'vitest';
-import MyComponent from './MyComponent.svelte';
+// Request types
+'init'              // Initialize Pyodide + install Django
+'execute'           // Execute Django view with optional HTTP params
+'writeFiles'        // Write files to virtual FS
+'runMigrations'     // Run Django migrations
+'makeMigrations'    // Create new migrations
+'createSuperuser'   // Create Django superuser
+'installPackage'    // Install Python package via micropip
 
-it('renders component', async () => {
-  const { getByText } = render(MyComponent);
-  await expect.element(getByText('Hello')).toBeVisible();
-});
+// Response types
+'ready'             // Pyodide initialized
+'result'            // Execution result with HTML/logs
+'error'             // Error occurred
+'log'               // Log message
 ```
 
-**Store/Utility Tests:**
-```typescript
-// Use .spec.ts or .test.ts extension (not .svelte.*)
-import { describe, it, expect } from 'vitest';
-import { myFunction } from './utils';
+### Default Django Project Structure
 
-describe('myFunction', () => {
-  it('returns expected value', () => {
-    expect(myFunction(1, 2)).toBe(3);
-  });
-});
-```
+Located in `src/lib/stores/workspace.ts`:
+- `myproject/` - Django project config (settings, urls, wsgi)
+- `myapp/` - Django app with views, models, urls
+- `templates/` - Django templates
+- `manage.py` - Django management script
 
-**E2E Tests:**
-```typescript
-// In e2e/ directory
-import { test, expect } from '@playwright/test';
+### Testing Setup
 
-test('page loads', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.locator('h1')).toBeVisible();
-});
-```
+Two test configurations in `vite.config.ts`:
+1. **Client tests** - Browser-based tests for Svelte components (`.svelte.test.ts`)
+2. **Server tests** - Node-based tests for utilities (`.test.ts`)
 
-## Key Implementation Details
+## Important Patterns
 
-### Data Persistence
-- All project files saved to `localStorage['django-playground-files']`
-- Files automatically loaded on mount
-- Reset functionality restores default Django template
+### File Operations
+- Always use the `workspaceFiles` store for file state management
+- Files are key-value pairs: `Record<string, string>` where key is filepath
+- Use `updateFile()`, `addFile()`, `deleteFile()` store methods
 
-### CodeMirror Setup
-- Theme: One Dark
-- Language: Python
-- Extensions: autocomplete, commands, linting
-- Two-way binding with workspace store
+### Worker Communication
+- All worker interactions are message-based and asynchronous
+- Always handle both success and error response types
+- Worker maintains its own Pyodide instance - cannot be accessed directly
 
-### iframe Sandbox
-- Output rendered in isolated iframe using `srcdoc`
-- Link interception for SPA-like navigation
-- Post-message communication for route changes
-- Template in `srcdoc-template.ts`
+### Django-Specific
+- Database: SQLite3 in-memory via Pyodide's FS
+- Settings module: `myproject.settings`
+- Password hasher: MD5 (fast for WebAssembly, not for production)
+- Async mode: `DJANGO_ALLOW_ASYNC_UNSAFE=true` for synchronous ORM
 
-### File Tree Component
-- Recursive rendering of file structure
-- Emoji icons for file types (🐍 .py, 📄 .html, etc.)
-- Expandable/collapsible directories
-- Highlights current file
-
-### UI Components
-- Uses **shadcn-svelte** components for consistent design
-- Button behavior:
-  - When NOT executing: Shows "Run" button (primary variant)
-  - When executing: Shows "Refresh" button (outline variant)
-  - This provides clear visual feedback and prevents accidental reruns
-
-## Configuration Files
-
-- `svelte.config.js` - SvelteKit config, preprocessors (vitePreprocess, mdsvex)
-- `vite.config.ts` - Vite plugins, Vitest dual-project setup
-- `tsconfig.json` - TypeScript strict mode enabled
-- `eslint.config.js` - ESLint with Svelte and TypeScript support
-- `playwright.config.ts` - E2E test configuration
-
-## Package Manager
-
-This project uses **pnpm**. Always use `pnpm` commands, not `npm` or `yarn`.
+### SvelteKit Considerations
+- Uses Svelte 5 runes (`$state`, `$derived`, `$effect`) for reactivity
+- No server-side rendering for main IDE page (runs entirely client-side)
+- Web Worker cannot import SvelteKit modules (must be vanilla TS)

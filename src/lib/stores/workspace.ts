@@ -167,7 +167,8 @@ def index(request):
             </p>
             <div style="background: #f0f4f8; padding: 15px; border-radius: 8px; margin-top: 20px;">
                 <p style="margin: 0; color: #2d3748; font-size: 14px;">
-                    <strong>Admin Login:</strong> username: <code>admin</code> | password: <code>admin123</code>
+               Run the migrate button first so tables are created in local db. Then click Create Superuer button to create the superuser.
+                <strong>Admin Login:</strong> username: <code>admin</code> | password: <code>admin</code>
                 </p>
             </div>
 
