@@ -106,10 +106,36 @@ export async function executeDjangoView(
 import sys
 import gc
 
-# Remove all our modules from cache so they get reloaded
-modules_to_remove = [key for key in sys.modules.keys() if key.startswith('myapp') or key.startswith('myproject') or key == 'urls']
+# Dynamically determine which modules to clear based on INSTALLED_APPS
+modules_to_remove = []
+try:
+    from django.conf import settings
+    if settings.configured:
+        # Get custom apps from INSTALLED_APPS (exclude django.contrib.*)
+        for app in settings.INSTALLED_APPS:
+            if not app.startswith('django.'):
+                # Remove the app module and all submodules
+                modules_to_remove.extend([
+                    key for key in sys.modules.keys()
+                    if key == app or key.startswith(app + '.')
+                ])
+except:
+    pass
+
+# Fallback: also remove common module names
+for prefix in ['myapp', 'myproject', 'urls']:
+    modules_to_remove.extend([
+        key for key in sys.modules.keys()
+        if key == prefix or key.startswith(prefix + '.')
+    ])
+
+# Remove duplicates
+modules_to_remove = list(set(modules_to_remove))
+
+# Remove modules from cache
 for module in modules_to_remove:
-    del sys.modules[module]
+    if module in sys.modules:
+        del sys.modules[module]
 
 # Force garbage collection to clear any cached references
 gc.collect()
@@ -198,21 +224,9 @@ try:
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
         django.setup()
 
-        # Run migrations and create superuser (only once per session)
+        # Auto-run migrations on first setup to create necessary tables
         from django.core.management import call_command
-        from django.contrib.auth import get_user_model
-
-        try:
-            # Run migrations to create tables
-            call_command('migrate', '--run-syncdb', verbosity=0)
-
-            # Create superuser if it doesn't exist
-            User = get_user_model()
-            if not User.objects.filter(username='admin').exists():
-                User.objects.create_superuser('admin', 'admin@example.com', 'admin123')
-        except Exception as e:
-            # Ignore errors if already run
-            pass
+        call_command('migrate', '--run-syncdb', verbosity=0)
 
     # Create WSGI environ
     environ = {

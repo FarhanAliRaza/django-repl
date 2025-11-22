@@ -6,7 +6,7 @@
 	import { oneDark } from '@codemirror/theme-one-dark';
 	import { keymap } from '@codemirror/view';
 	import { indentWithTab } from '@codemirror/commands';
-	import { currentFile, workspaceFiles } from '$lib/stores/workspace';
+	import { workspaceState } from '$lib/stores/workspace.svelte';
 
 	// Dispatch custom event to trigger run
 	function triggerRun() {
@@ -16,12 +16,18 @@
 
 	let editorElement: HTMLDivElement;
 	let editorView: EditorView | null = null;
-	let currentContent = '';
+	let currentContent = $state('');
+	let lastLoadedFile = $state('');
 
-	$: if (editorView && $currentFile) {
-		const content = $workspaceFiles[$currentFile] || '';
-		if (content !== currentContent) {
+	// Update editor when file changes
+	$effect(() => {
+		const file = workspaceState.currentFile;
+		const files = workspaceState.files;
+
+		if (editorView && file && file !== lastLoadedFile) {
+			const content = files[file] || '';
 			currentContent = content;
+			lastLoadedFile = file;
 			editorView.dispatch({
 				changes: {
 					from: 0,
@@ -30,10 +36,10 @@
 				}
 			});
 		}
-	}
+	});
 
 	onMount(() => {
-		const initialContent = $workspaceFiles[$currentFile] || '';
+		const initialContent = workspaceState.files[workspaceState.currentFile] || '';
 		currentContent = initialContent;
 
 		const state = EditorState.create({
@@ -53,7 +59,7 @@
 					if (update.docChanged) {
 						const newContent = update.state.doc.toString();
 						currentContent = newContent;
-						workspaceFiles.updateFile($currentFile, newContent);
+						workspaceState.updateFile(workspaceState.currentFile, newContent);
 					}
 				}),
 				EditorView.theme({
@@ -86,7 +92,7 @@
 
 <div class="editor-wrapper">
 	<div class="editor-header">
-		<span class="file-name">{$currentFile}</span>
+		<span class="file-name">{workspaceState.currentFile}</span>
 	</div>
 	<div class="editor-container" bind:this={editorElement}></div>
 </div>

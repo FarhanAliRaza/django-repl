@@ -31,6 +31,7 @@ export interface ExecutionResult {
 	isStaticFile?: boolean; // True if this is a static file response
 	requestedPath?: string; // The path that was requested
 	contentType?: string; // Content-Type header for static files
+	migrationFiles?: Record<string, string>; // Generated migration files from makemigrations
 }
 
 export interface LogEntry {

@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
-	import { get } from 'svelte/store';
 	import FileTree from '$lib/components/FileTree.svelte';
 	import Editor from '$lib/components/Editor.svelte';
 	import Output from '$lib/components/Output.svelte';
-	import { workspaceFiles, currentFile } from '$lib/stores/workspace';
+	import { workspaceState } from '$lib/stores/workspace.svelte';
 	import { executionState, ReplState } from '$lib/stores/execution.svelte';
 	import type { WorkerRequest, WorkerResponse } from '$lib/types';
 	import * as Resizable from '$lib/components/ui/resizable/index.js';
@@ -111,6 +110,18 @@
 						if (payload && 'success' in payload) {
 							executionState.setExecutionResult(payload);
 
+							// Handle migration files returned from makemigrations
+							if (payload.migrationFiles) {
+								console.log('✅ Received migration files from worker:', payload.migrationFiles);
+								console.log('📝 File paths:', Object.keys(payload.migrationFiles));
+								for (const [filePath, content] of Object.entries(payload.migrationFiles)) {
+									console.log(`📄 Adding file: ${filePath}`);
+									workspaceState.updateFile(filePath, content);
+									console.log(`✓ File added to workspace: ${filePath}`);
+								}
+								console.log('📂 Current workspace files:', Object.keys(workspaceState.files));
+							}
+
 							// Handle redirects (3xx status codes) - follow redirect with GET request
 							if (payload.status && payload.redirectTo) {
 								const statusCode = parseInt(payload.status.split(' ')[0]);
@@ -165,7 +176,7 @@
 		// Don't clear logs on page navigation - preserve execution history
 		executionState.startExecution(false);
 
-		const files = $workspaceFiles;
+		const files = workspaceState.getFiles();
 
 		// Save to localStorage
 		// workspaceFiles.saveToLocalStorage(files);
@@ -195,7 +206,7 @@
 		// Don't clear logs on form submission - preserve execution history
 		executionState.startExecution(false);
 
-		const files = $workspaceFiles;
+		const files = workspaceState.getFiles();
 
 		// Save to localStorage
 		// workspaceFiles.saveToLocalStorage(files);
@@ -224,8 +235,8 @@
 		// Clear logs on initial Run (not on refresh/navigation)
 		executionState.startExecution(true);
 
-		const files = $workspaceFiles;
-		const currentFileName = get(currentFile);
+		const files = workspaceState.getFiles();
+		const currentFileName = workspaceState.currentFile;
 
 		// Log to browser console what changed
 		console.group('🔄 Django Playground - Running Code');
@@ -280,7 +291,7 @@
 	function refreshFiles() {
 		if (!worker || executionState.replState !== ReplState.READY) return;
 
-		const files = $workspaceFiles;
+		const files = workspaceState.getFiles();
 
 		// Only log myapp/views.py with full content
 		console.group('🔄 Django Playground - Force Refresh');
@@ -317,7 +328,7 @@
 	function runMigrations() {
 		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
 
-		const files = get(workspaceFiles);
+		const files = workspaceState.getFiles();
 
 		executionState.addLog({
 			timestamp: Date.now(),
@@ -334,7 +345,7 @@
 	function makeMigrations() {
 		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
 
-		const files = get(workspaceFiles);
+		const files = workspaceState.getFiles();
 
 		executionState.addLog({
 			timestamp: Date.now(),
@@ -351,7 +362,7 @@
 	function createSuperuser() {
 		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
 
-		const files = get(workspaceFiles);
+		const files = workspaceState.getFiles();
 
 		executionState.addLog({
 			timestamp: Date.now(),

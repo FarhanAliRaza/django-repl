@@ -118,6 +118,9 @@ import sys
 from io import StringIO
 import os
 
+# Disable bytecode to always read fresh .py files
+sys.dont_write_bytecode = True
+
 # Force synchronous mode
 os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
 
@@ -136,6 +139,50 @@ try:
     if not settings.configured:
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
         django.setup()
+
+    # Clear Python module cache so Django detects model changes
+    import gc
+    import importlib
+    from django.apps import apps
+
+    # Get app configs before clearing
+    custom_apps = [app for app in apps.get_app_configs() if not app.name.startswith('django.')]
+
+    # CRITICAL: Clear models from the global all_models registry
+    # NOTE: app_config.models is a PROPERTY that reads from all_models,
+    # so we should NOT set it directly - only clear all_models!
+    for app_config in custom_apps:
+        app_label = app_config.label
+
+        # Clear from apps.all_models global registry
+        if app_label in apps.all_models:
+            apps.all_models[app_label] = {}
+
+    # ONLY remove the models.py module, NOT the entire app package!
+    for app_config in custom_apps:
+        models_module_name = f"{app_config.name}.models"
+        if models_module_name in sys.modules:
+            del sys.modules[models_module_name]
+
+    # Force garbage collection
+    gc.collect()
+
+    # Invalidate import caches to ensure fresh file reads
+    importlib.invalidate_caches()
+
+    # Re-import models to trigger fresh registration
+    for app_config in custom_apps:
+        try:
+            models_module_name = f"{app_config.name}.models"
+
+            # Import and reload the models module
+            models_module = importlib.import_module(models_module_name)
+            importlib.reload(models_module)
+
+        except Exception as e:
+            print(f"Error reloading {app_config.name}: {e}")
+            import traceback
+            traceback.print_exc()
 
     call_command('makemigrations', verbosity=2)
 
@@ -169,12 +216,49 @@ output
 			};
 		}
 
+		// Read back generated migration files from Pyodide filesystem
+		const migrationFiles: Record<string, string> = {};
+		const migrationResult = await pyodide.runPythonAsync(`
+import os
+import json
+
+migration_files = {}
+
+# Scan all app migration directories
+for app in ['myapp']:  # Add more apps as needed
+    migrations_dir = os.path.join(app, 'migrations')
+    if os.path.exists(migrations_dir):
+        for filename in os.listdir(migrations_dir):
+            # Include all .py files (including __init__.py)
+            if filename.endswith('.py'):
+                filepath = os.path.join(migrations_dir, filename)
+                with open(filepath, 'r') as f:
+                    content = f.read()
+                    file_path_key = filepath
+                    migration_files[file_path_key] = content
+
+json.dumps(migration_files)
+		`);
+
+		const migrationsJson = migrationResult.toString();
+		const parsedMigrations = JSON.parse(migrationsJson);
+		Object.assign(migrationFiles, parsedMigrations);
+
 		log('Migrations created successfully', 'success');
+		if (Object.keys(migrationFiles).length > 0) {
+			log(`Created ${Object.keys(migrationFiles).length} migration file(s)`, 'info');
+			// Log the actual file paths
+			for (const path of Object.keys(migrationFiles)) {
+				log(`Migration file: ${path}`, 'info');
+			}
+		}
+
 		return {
 			success: true,
 			output: stdout,
 			logs: getLogs(),
-			html: undefined // Don't update HTML for migrations
+			html: undefined,
+			migrationFiles // Return the migration files to be added to workspace
 		};
 	} catch (error) {
 		log(`Make migrations error: ${error}`, 'error');

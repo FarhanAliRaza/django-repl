@@ -1,5 +1,5 @@
 import type { ExecutionResult, LogEntry, HttpCookies } from '$lib/types';
-import { CookieStorage } from '$lib/utils/cookie-storage';
+import { CookieStorage } from '$lib/utils/cookie-storage.svelte';
 
 export enum ReplState {
 	INITIALIZING = 'initializing',  // Python environment is loading

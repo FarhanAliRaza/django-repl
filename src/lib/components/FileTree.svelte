@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { fileTree, currentFile } from '$lib/stores/workspace';
+	import { workspaceState } from '$lib/stores/workspace.svelte';
 	import type { FileNode } from '$lib/types';
 
-	let expandedDirs = new Set<string>(['myproject', 'myapp', 'templates']);
+	let expandedDirs = $state(new Set<string>(['myproject', 'myapp', 'myapp/migrations', 'templates']));
 
 	function toggleDir(path: string) {
 		if (expandedDirs.has(path)) {
@@ -10,11 +10,12 @@
 		} else {
 			expandedDirs.add(path);
 		}
-		expandedDirs = expandedDirs;
+		// Trigger reactivity
+		expandedDirs = new Set(expandedDirs);
 	}
 
 	function selectFile(path: string) {
-		currentFile.set(path);
+		workspaceState.currentFile = path;
 	}
 
 	function getIcon(node: FileNode): string {
@@ -32,7 +33,7 @@
 		<span>Files</span>
 	</div>
 	<div class="file-tree-content">
-		{#each $fileTree as node}
+		{#each workspaceState.fileTree as node}
 			<div class="tree-node">
 				{#if node.type === 'directory'}
 					<div class="directory" class:expanded={expandedDirs.has(node.path)}>
@@ -54,7 +55,7 @@
 													{#each child.children as grandchild}
 														<button
 															class="node-button file nested-2"
-															class:active={$currentFile === grandchild.path}
+															class:active={workspaceState.currentFile === grandchild.path}
 															onclick={() => selectFile(grandchild.path)}
 														>
 															<span class="icon">{getIcon(grandchild)}</span>
@@ -67,7 +68,7 @@
 									{:else}
 										<button
 											class="node-button file nested"
-											class:active={$currentFile === child.path}
+											class:active={workspaceState.currentFile === child.path}
 											onclick={() => selectFile(child.path)}
 										>
 											<span class="icon">{getIcon(child)}</span>
@@ -81,7 +82,7 @@
 				{:else}
 					<button
 						class="node-button file"
-						class:active={$currentFile === node.path}
+						class:active={workspaceState.currentFile === node.path}
 						onclick={() => selectFile(node.path)}
 					>
 						<span class="icon">{getIcon(node)}</span>

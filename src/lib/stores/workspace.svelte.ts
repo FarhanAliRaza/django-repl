@@ -1,4 +1,3 @@
-import { writable, derived } from 'svelte/store';
 import type { FileNode } from '$lib/types';
 
 // Django starter template
@@ -130,12 +129,21 @@ class MyappConfig(AppConfig):
 
 	'myapp/models.py': `from django.db import models
 
+
 # Create your models here.
+class Blog(models.Model):
+
+  title = models.CharField(max_length=255)
 `,
 
 	'myapp/admin.py': `from django.contrib import admin
 
 # Register your models here.
+from  myapp.models import Blog 
+
+
+admin.site.register(Blog)
+
 `,
 
 	'myapp/migrations/__init__.py': '',
@@ -261,91 +269,77 @@ urlpatterns = [
 `
 };
 
-// File management store
-function createWorkspaceStore() {
-	const { subscribe, set, update } = writable<Record<string, string>>(defaultDjangoProject);
+// Workspace state management using Svelte 5 runes
+class WorkspaceState {
+	files = $state<Record<string, string>>(defaultDjangoProject);
+	currentFile = $state<string>('myapp/views.py');
 
-	return {
-		subscribe,
-		reset: () => set(defaultDjangoProject),
-		updateFile: (path: string, content: string) => {
-			update((files) => ({ ...files, [path]: content }));
-		},
-		addFile: (path: string, content: string = '') => {
-			update((files) => ({ ...files, [path]: content }));
-		},
-		deleteFile: (path: string) => {
-			update((files) => {
-				const newFiles = { ...files };
-				delete newFiles[path];
-				return newFiles;
-			});
-		}
-		// loadFromLocalStorage: () => {
-		// 	if (typeof window !== 'undefined') {
-		// 		const saved = localStorage.getItem('django-playground-files');
-		// 		if (saved) {
-		// 			try {
-		// 				set(JSON.parse(saved));
-		// 			} catch (e) {
-		// 				console.error('Failed to load from localStorage:', e);
-		// 			}
-		// 		}
-		// 	}
-		// },
-		// saveToLocalStorage: (files: Record<string, string>) => {
-		// 	if (typeof window !== 'undefined') {
-		// 		localStorage.setItem('django-playground-files', JSON.stringify(files));
-		// 	}
-		// }
-	};
-}
+	// Derived file tree structure
+	fileTree = $derived.by(() => {
+		const tree: FileNode[] = [];
+		const pathMap = new Map<string, FileNode>();
 
-export const workspaceFiles = createWorkspaceStore();
+		// Sort files by path
+		const sortedPaths = Object.keys(this.files).sort();
 
-// Current file selection
-export const currentFile = writable<string>('myapp/views.py');
+		for (const path of sortedPaths) {
+			const parts = path.split('/');
+			let currentPath = '';
 
-// File tree structure derived from files
-export const fileTree = derived(workspaceFiles, ($files) => {
-	const tree: FileNode[] = [];
-	const pathMap = new Map<string, FileNode>();
+			for (let i = 0; i < parts.length; i++) {
+				const part = parts[i];
+				const isFile = i === parts.length - 1;
+				currentPath += (i > 0 ? '/' : '') + part;
 
-	// Sort files by path
-	const sortedPaths = Object.keys($files).sort();
+				if (!pathMap.has(currentPath)) {
+					const node: FileNode = {
+						name: part,
+						path: currentPath,
+						type: isFile ? 'file' : 'directory',
+						content: isFile ? this.files[path] : undefined,
+						children: isFile ? undefined : []
+					};
 
-	for (const path of sortedPaths) {
-		const parts = path.split('/');
-		let currentPath = '';
-
-		for (let i = 0; i < parts.length; i++) {
-			const part = parts[i];
-			const isFile = i === parts.length - 1;
-			currentPath += (i > 0 ? '/' : '') + part;
-
-			if (!pathMap.has(currentPath)) {
-				const node: FileNode = {
-					name: part,
-					path: currentPath,
-					type: isFile ? 'file' : 'directory',
-					content: isFile ? $files[path] : undefined,
-					children: isFile ? undefined : []
-				};
-
-				if (i === 0) {
-					tree.push(node);
-				} else {
-					const parentPath = parts.slice(0, i).join('/');
-					const parent = pathMap.get(parentPath);
-					if (parent?.children) {
-						parent.children.push(node);
+					if (i === 0) {
+						tree.push(node);
+					} else {
+						const parentPath = parts.slice(0, i).join('/');
+						const parent = pathMap.get(parentPath);
+						if (parent?.children) {
+							parent.children.push(node);
+						}
 					}
-				}
 
-				pathMap.set(currentPath, node);
+					pathMap.set(currentPath, node);
+				}
 			}
 		}
+
+		return tree;
+	});
+
+	reset() {
+		this.files = { ...defaultDjangoProject };
 	}
 
-	return tree;
-});
+	updateFile(path: string, content: string) {
+		this.files = { ...this.files, [path]: content };
+	}
+
+	addFile(path: string, content: string = '') {
+		this.files = { ...this.files, [path]: content };
+	}
+
+	deleteFile(path: string) {
+		const newFiles = { ...this.files };
+		delete newFiles[path];
+		this.files = newFiles;
+	}
+
+	// Get all files as a plain object (for worker communication)
+	getFiles(): Record<string, string> {
+		return { ...this.files };
+	}
+}
+
+export const workspaceState = new WorkspaceState();
