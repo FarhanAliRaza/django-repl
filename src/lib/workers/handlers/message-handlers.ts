@@ -2,7 +2,11 @@ import type { WorkerRequest, WorkerResponse } from '$lib/types';
 import { initializePyodide, installDjango, installPackage, setFirstLoad } from '../pyodide-manager';
 import { executePython, executeDjangoView } from '../django/executor';
 import { runMigrations, makeMigrations, createSuperuser } from '../django/management';
-import { writeFilesToVirtualFS } from '../filesystem';
+import {
+	writeFilesToVirtualFS,
+	getDatabaseFromVirtualFS,
+	setDatabaseToVirtualFS
+} from '../filesystem';
 import { log, getLogs } from '../logger';
 
 export async function handleInit(isFirstLoad?: boolean): Promise<WorkerResponse> {
@@ -129,5 +133,34 @@ export async function handleCreateSuperuser(
 	return {
 		type: 'result',
 		payload: result
+	};
+}
+
+export async function handleGetDatabase(): Promise<WorkerResponse> {
+	const dbData = await getDatabaseFromVirtualFS();
+	if (dbData) {
+		return {
+			type: 'database',
+			payload: { dbData }
+		};
+	} else {
+		return {
+			type: 'error',
+			payload: {
+				message: 'Failed to get database'
+			}
+		};
+	}
+}
+
+export async function handleSetDatabase(dbData: Uint8Array): Promise<WorkerResponse> {
+	const success = await setDatabaseToVirtualFS(dbData);
+	return {
+		type: 'result',
+		payload: {
+			success,
+			output: success ? 'Database set successfully' : 'Failed to set database',
+			logs: getLogs()
+		}
 	};
 }

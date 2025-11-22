@@ -49,7 +49,9 @@ export interface WorkerRequest {
 		| 'writeFiles'
 		| 'runMigrations'
 		| 'makeMigrations'
-		| 'createSuperuser';
+		| 'createSuperuser'
+		| 'getDatabase'
+		| 'setDatabase';
 	payload?: {
 		code?: string;
 		files?: Record<string, string>;
@@ -65,12 +67,13 @@ export interface WorkerRequest {
 		email?: string;
 		password?: string;
 		isFirstLoad?: boolean; // True if this is the first load of the session
+		dbData?: Uint8Array; // Database file data for transfer
 	};
 }
 
 export interface WorkerResponse {
-	type: 'ready' | 'result' | 'error' | 'log';
-	payload?: ExecutionResult | LogEntry | { message: string } | { success: boolean };
+	type: 'ready' | 'result' | 'error' | 'log' | 'database';
+	payload?: ExecutionResult | LogEntry | { message: string } | { success: boolean } | { dbData: Uint8Array };
 }
 
 // Django project structure

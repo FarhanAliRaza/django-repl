@@ -11,107 +11,100 @@
 	import { Button } from '$lib/components/ui/button';
 	import { pathState } from '$lib/stores/path-state.svelte';
 	import { RefreshCw, Play } from '@lucide/svelte';
+	import { WorkerPool } from '$lib/worker-pool';
+	import type { HttpMethod } from '$lib/types';
 
-	let worker: Worker | null = null;
-	let isFirstWorkerLoad = $state(true); // Track if this is the first worker load in this session
+	let workerPool: WorkerPool | null = null;
+	let currentWorkerId: string | null = $state(null);
 
-	function createWorker() {
-		// Reset state when creating a new worker
-		executionState.resetState();
+	// Message handler for worker pool responses
+	function handleWorkerMessage(response: WorkerResponse) {
+		const { type, payload } = response;
 
-		const newWorker = new Worker(new URL('$lib/workers/python-executor.ts', import.meta.url), {
-			type: 'module'
-		});
-
-		newWorker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-			const { type, payload } = event.data;
-
-			switch (type) {
-				case 'ready':
-					if (payload && 'success' in payload && payload.success === true) {
-						executionState.setWorkerReady();
-						executionState.addLog({
-							timestamp: Date.now(),
-							type: 'success',
-							message: 'Python environment ready'
-						});
-					} else {
-						executionState.addLog({
-							timestamp: Date.now(),
-							type: 'error',
-							message: 'Failed to initialize Python environment'
-						});
-					}
-					break;
-
-				case 'log':
-					if (payload && 'timestamp' in payload && 'type' in payload && 'message' in payload) {
-						executionState.addLog(payload);
-					}
-					break;
-
-				case 'result':
-					if (payload && 'success' in payload) {
-						executionState.setExecutionResult(payload);
-
-						// Handle migration files returned from makemigrations
-						if (payload.migrationFiles) {
-							console.log('✅ Received migration files from worker:', payload.migrationFiles);
-							console.log('📝 File paths:', Object.keys(payload.migrationFiles));
-							for (const [filePath, content] of Object.entries(payload.migrationFiles)) {
-								console.log(`📄 Adding file: ${filePath}`);
-								workspaceState.updateFile(filePath, content);
-								console.log(`✓ File added to workspace: ${filePath}`);
-							}
-							console.log('📂 Current workspace files:', Object.keys(workspaceState.files));
-						}
-
-						// Handle redirects (3xx status codes) - follow redirect with GET request
-						if (payload.status && payload.redirectTo) {
-							const statusCode = parseInt(payload.status.split(' ')[0]);
-							if (statusCode >= 300 && statusCode < 400) {
-								console.log(`Redirect ${statusCode}: Following redirect to ${payload.redirectTo}`);
-								// Update path and make GET request to redirect location
-								pathState.setPath(payload.redirectTo);
-								runCodeWithPath(payload.redirectTo);
-							}
-						}
-					}
-					break;
-
-				case 'error':
+		switch (type) {
+			case 'ready':
+				if (payload && 'success' in payload && payload.success === true) {
+					executionState.setWorkerReady();
+					executionState.addLog({
+						timestamp: Date.now(),
+						type: 'success',
+						message: 'Python environment ready'
+					});
+				} else {
 					executionState.addLog({
 						timestamp: Date.now(),
 						type: 'error',
-						message:
-							(payload && 'message' in payload ? payload.message : undefined) || 'Unknown error'
+						message: 'Failed to initialize Python environment'
 					});
-					executionState.isExecuting = false;
-					break;
-			}
-		};
+				}
+				break;
 
-		newWorker.onerror = (error) => {
+			case 'log':
+				if (payload && 'timestamp' in payload && 'type' in payload && 'message' in payload) {
+					executionState.addLog(payload);
+				}
+				break;
+
+			case 'result':
+				if (payload && 'success' in payload && 'output' in payload && 'logs' in payload) {
+					executionState.setExecutionResult(payload);
+
+					// Handle migration files returned from makemigrations
+					if ('migrationFiles' in payload && payload.migrationFiles) {
+						console.log('✅ Received migration files from worker:', payload.migrationFiles);
+						console.log('📝 File paths:', Object.keys(payload.migrationFiles));
+						for (const [filePath, content] of Object.entries(payload.migrationFiles)) {
+							console.log(`📄 Adding file: ${filePath as string}`);
+							workspaceState.updateFile(filePath as string, content as string);
+							console.log(`✓ File added to workspace: ${filePath as string}`);
+						}
+						console.log('📂 Current workspace files:', Object.keys(workspaceState.files));
+					}
+
+					// Handle redirects (3xx status codes) - follow redirect with GET request
+					if ('status' in payload && 'redirectTo' in payload && payload.status && payload.redirectTo) {
+						const statusCode = parseInt(payload.status.split(' ')[0]);
+						if (statusCode >= 300 && statusCode < 400) {
+							console.log(`Redirect ${statusCode}: Following redirect to ${payload.redirectTo}`);
+							// Update path and make GET request to redirect location
+							pathState.setPath(payload.redirectTo);
+							runCodeWithPath(payload.redirectTo);
+						}
+					}
+				}
+				break;
+
+			case 'error':
+				executionState.addLog({
+					timestamp: Date.now(),
+					type: 'error',
+					message:
+						(payload && 'message' in payload ? String(payload.message) : undefined) || 'Unknown error'
+				});
+				executionState.isExecuting = false;
+				break;
+		}
+	}
+
+	async function initializeWorkerPool() {
+		// Reset state when initializing
+		executionState.resetState();
+
+		workerPool = new WorkerPool(2); // Create pool with 2 workers
+		await workerPool.initialize((message) => {
 			executionState.addLog({
 				timestamp: Date.now(),
-				type: 'error',
-				message: `Worker error: ${error.message}`
+				type: 'info',
+				message
 			});
-			executionState.isExecuting = false;
-		};
+		});
 
-		// Initialize Pyodide with first load flag
-		newWorker.postMessage({
-			type: 'init',
-			payload: { isFirstLoad: isFirstWorkerLoad }
-		} as WorkerRequest);
-
-		// After first worker load, set flag to false for subsequent hot restarts
-		if (isFirstWorkerLoad) {
-			isFirstWorkerLoad = false;
+		// Get the first ready worker
+		const readyWorker = workerPool.getReadyWorker();
+		if (readyWorker) {
+			currentWorkerId = readyWorker.id;
+			readyWorker.messageHandler = handleWorkerMessage;
 		}
-
-		return newWorker;
 	}
 
 	onMount(() => {
@@ -146,7 +139,7 @@
 		) => {
 			console.log('Form submission:', event.detail);
 			const { path, method, body, headers } = event.detail;
-			runCodeWithRequest(path, method, body, headers);
+			runCodeWithRequest(path, method as HttpMethod, body, headers);
 		};
 
 		// Listen for editor save event (Ctrl+S / Cmd+S)
@@ -170,21 +163,22 @@
 			window.removeEventListener('editor-save', handleEditorSave);
 		};
 
-		// Initialize worker
+		// Initialize worker pool
 		if (browser) {
-			worker = createWorker();
+			initializeWorkerPool();
 		}
 
 		return () => {
 			cleanup();
-			worker?.terminate();
+			workerPool?.terminateAll();
 		};
 	});
 
 	let lastFiles: Record<string, string> = {};
 
 	function runCodeWithPath(path: string) {
-		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+		if (!workerPool || !currentWorkerId || executionState.replState === ReplState.INITIALIZING)
+			return;
 
 		console.log(`Running Django with path: ${path}`);
 
@@ -197,7 +191,7 @@
 		// workspaceFiles.saveToLocalStorage(files);
 
 		// Send files to worker with skipFileWrite=true for navigation only
-		worker.postMessage({
+		workerPool.sendMessage(currentWorkerId, {
 			type: 'execute',
 			payload: {
 				files,
@@ -205,16 +199,17 @@
 				skipFileWrite: true,
 				cookies: executionState.getCookies()
 			}
-		} as WorkerRequest);
+		});
 	}
 
 	function runCodeWithRequest(
 		path: string,
-		method: string,
+		method: HttpMethod,
 		body: Record<string, any>,
 		headers: Record<string, string>
 	) {
-		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+		if (!workerPool || !currentWorkerId || executionState.replState === ReplState.INITIALIZING)
+			return;
 
 		console.log(`Running Django with ${method} request to ${path}`, { body, headers });
 
@@ -230,7 +225,7 @@
 		pathState.setPath(path);
 
 		// Send files to worker with skipFileWrite=true for POST requests (navigation only)
-		worker.postMessage({
+		workerPool.sendMessage(currentWorkerId, {
 			type: 'execute',
 			payload: {
 				files,
@@ -241,11 +236,11 @@
 				body,
 				cookies: executionState.getCookies()
 			}
-		} as WorkerRequest);
+		});
 	}
 
 	function runCode() {
-		if (!worker || executionState.replState !== ReplState.IDLE) return;
+		if (!workerPool || !currentWorkerId || executionState.replState !== ReplState.IDLE) return;
 
 		// Clear logs on initial Run (not on refresh/navigation)
 		executionState.startExecution(true);
@@ -293,24 +288,23 @@
 		// workspaceFiles.saveToLocalStorage(files);
 
 		// Send files to worker with current path and cookies
-		worker.postMessage({
+		workerPool.sendMessage(currentWorkerId, {
 			type: 'execute',
 			payload: {
 				files,
 				path: pathState.currentPath,
 				cookies: executionState.getCookies()
 			}
-		} as WorkerRequest);
+		});
 	}
 
-	function refreshFiles() {
-		if (!worker || executionState.replState !== ReplState.READY) return;
+	async function refreshFiles() {
+		if (!workerPool || !currentWorkerId || executionState.replState !== ReplState.READY) return;
 
 		const files = workspaceState.getFiles();
 
-		console.group('🔄 Django Playground - Hot Restart');
-		console.log('💀 Killing old worker');
-		console.log('📦 Will restore from snapshot cache');
+		console.group('🔄 Django Playground - Worker Pool Swap');
+		console.log('🔄 Swapping to fresh worker from pool');
 
 		// Clear the lastFiles so it doesn't compare
 		lastFiles = {};
@@ -319,43 +313,52 @@
 		executionState.addLog({
 			timestamp: Date.now(),
 			type: 'info',
-			message: '🔄 Hot restarting worker...'
+			message: '🔄 Swapping to fresh worker...'
 		});
 
-		// Kill the old worker
-		worker.terminate();
-
-		// Create a new worker (will restore from snapshot if available)
-		worker = createWorker();
-
-		// Wait for worker to be ready, then send files and execute
-		const waitForReady = () => {
-			if (executionState.replState === ReplState.IDLE) {
-				console.log('✅ Worker ready, sending files');
-				console.groupEnd();
-
-				executionState.startExecution(false);
-
-				worker?.postMessage({
-					type: 'execute',
-					payload: {
-						files,
-						path: pathState.currentPath,
-						cookies: executionState.getCookies()
-					}
-				} as WorkerRequest);
-			} else {
-				// Check again in 100ms
-				setTimeout(waitForReady, 100);
+		// Swap to a fresh worker from the pool
+		const newWorkerId = await workerPool.swapToFreshWorker(
+			files,
+			currentWorkerId,
+			handleWorkerMessage,
+			(message) => {
+				executionState.addLog({
+					timestamp: Date.now(),
+					type: 'info',
+					message
+				});
 			}
-		};
+		);
 
-		// Start waiting for worker to be ready
-		waitForReady();
+		if (newWorkerId) {
+			currentWorkerId = newWorkerId;
+			console.log('✅ Swapped to worker', newWorkerId);
+			console.groupEnd();
+
+			executionState.startExecution(false);
+
+			workerPool.sendMessage(currentWorkerId, {
+				type: 'execute',
+				payload: {
+					files,
+					path: pathState.currentPath,
+					cookies: executionState.getCookies()
+				}
+			});
+		} else {
+			console.log('❌ Failed to swap to fresh worker');
+			console.groupEnd();
+			executionState.addLog({
+				timestamp: Date.now(),
+				type: 'error',
+				message: 'Failed to swap to fresh worker'
+			});
+		}
 	}
 
 	function runMigrations() {
-		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+		if (!workerPool || !currentWorkerId || executionState.replState === ReplState.INITIALIZING)
+			return;
 
 		const files = workspaceState.getFiles();
 
@@ -365,14 +368,15 @@
 			message: 'Running migrations...'
 		});
 
-		worker.postMessage({
+		workerPool.sendMessage(currentWorkerId, {
 			type: 'runMigrations',
 			payload: { files }
-		} as WorkerRequest);
+		});
 	}
 
 	function makeMigrations() {
-		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+		if (!workerPool || !currentWorkerId || executionState.replState === ReplState.INITIALIZING)
+			return;
 
 		const files = workspaceState.getFiles();
 
@@ -382,14 +386,15 @@
 			message: 'Making migrations...'
 		});
 
-		worker.postMessage({
+		workerPool.sendMessage(currentWorkerId, {
 			type: 'makeMigrations',
 			payload: { files }
-		} as WorkerRequest);
+		});
 	}
 
 	function createSuperuser() {
-		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+		if (!workerPool || !currentWorkerId || executionState.replState === ReplState.INITIALIZING)
+			return;
 
 		const files = workspaceState.getFiles();
 
@@ -399,7 +404,7 @@
 			message: 'Creating superuser (admin/admin)...'
 		});
 
-		worker.postMessage({
+		workerPool.sendMessage(currentWorkerId, {
 			type: 'createSuperuser',
 			payload: {
 				files,
@@ -407,7 +412,7 @@
 				email: 'admin@example.com',
 				password: 'admin'
 			}
-		} as WorkerRequest);
+		});
 	}
 </script>
 
