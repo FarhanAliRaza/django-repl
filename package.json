@@ -62,7 +62,6 @@
 		"@codemirror/state": "^6.5.2",
 		"@codemirror/theme-one-dark": "^6.1.3",
 		"@codemirror/view": "^6.38.8",
-		"@pyodide/http-adapter": "link:packages/pyodide-http",
 		"codemirror": "^6.0.2"
 	}
 }
