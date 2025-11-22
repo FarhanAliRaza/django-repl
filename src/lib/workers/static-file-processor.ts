@@ -32,21 +32,13 @@ export async function inlineStaticFiles(html: string): Promise<string> {
 	}
 
 	log(`Found ${staticFileUrls.size} static files to inline`, 'info');
+	const startFetch = performance.now();
 
-	// Fetch all static files through Django's StaticFilesHandler
-	const staticFiles = new Map<string, { content: string; contentType: string }>();
+	// Fetch all static files in one batch Python call (much faster than sequential WSGI requests)
+	const staticFiles = await fetchStaticFilesBatch(Array.from(staticFileUrls));
 
-	for (const url of staticFileUrls) {
-		try {
-			const fileContent = await fetchStaticFileThroughDjango(url);
-			if (fileContent) {
-				staticFiles.set(url, fileContent);
-				log(`Fetched static file: ${url}`, 'info');
-			}
-		} catch (error) {
-			log(`Failed to fetch static file ${url}: ${error}`, 'warning');
-		}
-	}
+	const fetchTime = ((performance.now() - startFetch) / 1000).toFixed(2);
+	log(`Static file fetch took ${fetchTime}s`, 'info');
 
 	// Replace <link> tags with inline <style>
 	html = html.replace(linkRegex, (fullMatch, url) => {
@@ -71,136 +63,76 @@ export async function inlineStaticFiles(html: string): Promise<string> {
 }
 
 /**
- * Fetch a static file through Django's StaticFilesHandler
+ * Fetch all static files in one batch Python call (much faster than sequential WSGI requests)
  */
-async function fetchStaticFileThroughDjango(
-	path: string
-): Promise<{ content: string; contentType: string } | null> {
+async function fetchStaticFilesBatch(
+	urls: string[]
+): Promise<Map<string, { content: string; contentType: string }>> {
 	const pyodide = getPyodide();
-	if (!pyodide) {
-		return null;
+	if (!pyodide || urls.length === 0) {
+		return new Map();
 	}
 
 	try {
-		// Execute Django WSGI handler to get static file
-		const result = await pyodide.runPythonAsync(`
-import sys
-import os
-from io import StringIO, BytesIO
+		// Send all URLs to Python and fetch them using Django's staticfiles finders
+		const urlsJson = JSON.stringify(urls);
+		const resultJson = await pyodide.runPythonAsync(`
+import json
+from django.contrib.staticfiles import finders
+from django.conf import settings
 
-# Capture stdout and stderr
-old_stdout = sys.stdout
-old_stderr = sys.stderr
-sys.stdout = StringIO()
-sys.stderr = StringIO()
+urls = json.loads('${urlsJson.replace(/'/g, "\\'")}')
+results = {}
 
-output = {
-    'content': None,
-    'content_type': 'text/plain',
-    'error': None
-}
+for url in urls:
+    # Remove '/static/' prefix to get the relative path
+    clean_path = url
+    if clean_path.startswith('/static/'):
+        clean_path = clean_path.replace('/static/', '', 1)
+    elif clean_path.startswith('static/'):
+        clean_path = clean_path.replace('static/', '', 1)
 
-try:
-    from django.conf import settings
-    from django.core.handlers.wsgi import WSGIHandler
-    from django.contrib.staticfiles.handlers import StaticFilesHandler
+    # Find the absolute path on the virtual filesystem
+    abs_path = finders.find(clean_path)
 
-    # Force synchronous mode
-    os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
+    if abs_path:
+        try:
+            # Read file directly from virtual filesystem
+            with open(abs_path, 'r', encoding='utf-8') as f:
+                content = f.read()
 
-    # Create WSGI environ for static file request
-    environ = {
-        'REQUEST_METHOD': 'GET',
-        'PATH_INFO': '${path}',
-        'QUERY_STRING': '',
-        'CONTENT_TYPE': '',
-        'CONTENT_LENGTH': '0',
-        'SERVER_NAME': 'localhost',
-        'SERVER_PORT': '8000',
-        'SERVER_PROTOCOL': 'HTTP/1.1',
-        'SCRIPT_NAME': '',
-        'wsgi.version': (1, 0),
-        'wsgi.url_scheme': 'http',
-        'wsgi.input': BytesIO(b''),
-        'wsgi.errors': sys.stderr,
-        'wsgi.multithread': False,
-        'wsgi.multiprocess': False,
-        'wsgi.run_once': False,
-    }
+            # Determine content type
+            content_type = 'text/plain'
+            if url.endswith('.css'):
+                content_type = 'text/css'
+            elif url.endswith('.js'):
+                content_type = 'application/javascript'
+            elif url.endswith('.json'):
+                content_type = 'application/json'
 
-    # Execute WSGI handler with static files support
-    handler = StaticFilesHandler(WSGIHandler())
+            results[url] = {
+                'content': content,
+                'contentType': content_type
+            }
+        except Exception as e:
+            # File not readable, skip it
+            pass
 
-    response_data = {
-        'status': None,
-        'headers': [],
-        'body': []
-    }
-
-    def start_response(status, headers, exc_info=None):
-        if exc_info:
-            try:
-                if response_data['headers']:
-                    raise exc_info[1].with_traceback(exc_info[2])
-            finally:
-                exc_info = None
-        elif response_data['headers']:
-            raise RuntimeError("Response already started")
-
-        response_data['status'] = status
-        response_data['headers'] = headers
-        return lambda data: response_data['body'].append(data)
-
-    result = handler(environ, start_response)
-    try:
-        for chunk in result:
-            if chunk:
-                response_data['body'].append(chunk)
-    finally:
-        if hasattr(result, 'close'):
-            result.close()
-
-    # Get the content
-    content_bytes = b''.join(response_data['body'])
-    output['content'] = content_bytes.decode('utf-8')
-
-    # Extract Content-Type header
-    for name, value in response_data['headers']:
-        if name.lower() == 'content-type':
-            output['content_type'] = value
-            break
-
-except Exception as e:
-    import traceback
-    output['error'] = str(e)
-    output['stderr'] = traceback.format_exc()
-finally:
-    sys.stdout = old_stdout
-    sys.stderr = old_stderr
-
-output
+json.dumps(results)
 		`);
 
-		const error = result.get('error');
-		if (error) {
-			log(`Django error fetching ${path}: ${error}`, 'error');
-			return null;
+		// Parse JSON result and convert to Map
+		const resultsObj = JSON.parse(resultJson);
+		const resultsMap = new Map<string, { content: string; contentType: string }>();
+
+		for (const [url, fileData] of Object.entries(resultsObj)) {
+			resultsMap.set(url, fileData as { content: string; contentType: string });
 		}
 
-		const content = result.get('content');
-		const contentType = result.get('content_type') || 'text/plain';
-
-		if (!content) {
-			log(`Empty content for ${path}`, 'warning');
-			return null;
-		}
-
-		return {
-			content: content,
-			contentType: contentType
-		};
+		log(`Fetched ${resultsMap.size} static files in batch`, 'success');
+		return resultsMap;
 	} catch (error) {
-		log(`Error fetching static file ${path}: ${error}`, 'error');
-		return null;
+		log(`Error fetching static files in batch: ${error}`, 'error');
+		return new Map();
 	}
 }

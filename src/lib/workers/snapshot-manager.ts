@@ -192,68 +192,55 @@ export async function restoreSnapshot(
 			};
 		});
 
-		// Write the archive to the virtual filesystem first
-		const archivePath = '/tmp/snapshot.tar.gz';
-		pyodide.FS.writeFile(archivePath, snapshotData.archive);
+		// Write archive to virtual FS and extract using Python
+		// (unpackArchive doesn't support extracting to custom path in older Pyodide versions)
+		pyodide.FS.writeFile('/tmp/snapshot.tar.gz', snapshotData.archive);
 
-		// Extract the archive in Python and verify Django is accessible
-		const extractionResult = await pyodide.runPythonAsync(`
+		// Extract and verify Django in one Python call (optimized)
+		const verifyResult = await pyodide.runPythonAsync(`
 import tarfile
 import os
-import shutil
 import sys
+import importlib
 
-# Remove existing site-packages if it exists
-site_packages_path = '/lib/python3.12/site-packages'
-if os.path.exists(site_packages_path):
-    shutil.rmtree(site_packages_path)
-
-# Create the parent directories
-os.makedirs('/lib/python3.12', exist_ok=True)
-
-# Extract the archive from the virtual filesystem
+# Extract the archive
 tar = tarfile.open('/tmp/snapshot.tar.gz', mode='r:gz')
-members = tar.getmembers()
-member_count = len(members)
 tar.extractall('/')
 tar.close()
 
-# Clean up the temporary file
+# Clean up
 os.remove('/tmp/snapshot.tar.gz')
 
 # Ensure site-packages is in sys.path
+site_packages_path = '/lib/python3.12/site-packages'
 if site_packages_path not in sys.path:
     sys.path.insert(0, site_packages_path)
 
-# Invalidate import caches to force Python to recognize the new packages
-import importlib
+# Invalidate import caches
 importlib.invalidate_caches()
 
-# Verify Django is accessible
+# Verify Django
 django_found = False
 django_version = None
 try:
     import django
     django_found = True
     django_version = django.__version__
-except ImportError as e:
-    import_error = str(e)
+except ImportError:
+    pass
 
-# Return debug info
 {
-    'member_count': member_count,
     'django_found': django_found,
     'django_version': django_version,
-    'site_packages_exists': os.path.exists(site_packages_path),
-    'site_packages_contents_count': len(os.listdir(site_packages_path)) if os.path.exists(site_packages_path) else 0
+    'site_packages_exists': os.path.exists(site_packages_path)
 }
 		`);
 
 		// Log debug info
-		const debugInfo = extractionResult.toJs({ dict_converter: Object.fromEntries });
+		const debugInfo = verifyResult.toJs({ dict_converter: Object.fromEntries });
 		const ageInMinutes = Math.round((Date.now() - snapshotData.metadata.timestamp) / 60000);
 		log(
-			`Snapshot restored (${ageInMinutes}m ago): ${debugInfo.member_count} files, Django ${debugInfo.django_found ? 'found v' + debugInfo.django_version : 'NOT FOUND'}, ${debugInfo.site_packages_contents_count} packages`,
+			`Snapshot restored (${ageInMinutes}m ago): Django ${debugInfo.django_found ? 'v' + debugInfo.django_version : 'NOT FOUND'}`,
 			debugInfo.django_found ? 'success' : 'error'
 		);
 

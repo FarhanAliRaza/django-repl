@@ -4,6 +4,9 @@ import { writeFilesToVirtualFS } from '../filesystem';
 import { inlineStaticFiles } from '../static-file-processor';
 import type { ExecutionResult } from '$lib/types';
 
+// Track if files have been written to this worker instance
+let filesWritten = false;
+
 export async function executePython(code: string): Promise<ExecutionResult> {
 	const pyodide = getPyodide();
 	if (!pyodide) {
@@ -91,19 +94,21 @@ export async function executeDjangoView(
 	}
 
 	try {
-		if (!skipFileWrite) {
-			// Only rewrite files on full refresh
+		// Always write files on first execution of this worker, even if skipFileWrite is true
+		if (!skipFileWrite || !filesWritten) {
 			log('Setting up Django environment...', 'info');
 			log(`Received ${Object.keys(files).length} files to execute`, 'info');
 
 			// Write files to virtual FS
 			await writeFilesToVirtualFS(files);
+			filesWritten = true;
 		} else {
 			// Navigation only - just log the path change
 			log(`Navigating to ${viewPath}`, 'info');
 		}
 
 		log('Executing Django WSGI handler...', 'info');
+		const startExec = Date.now();
 
 		// Serialize body to string
 		const bodyStr =
@@ -163,10 +168,6 @@ try:
         # Use the actual settings file from the project
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
         django.setup()
-
-        # Auto-run migrations on first setup to create necessary tables
-        from django.core.management import call_command
-        call_command('migrate', '--run-syncdb', verbosity=0)
 
     # Create WSGI environ
     environ = {
@@ -284,7 +285,8 @@ output
 			};
 		}
 
-		log(`Django view executed successfully (${status})`, 'success');
+		const execTime = ((Date.now() - startExec) / 1000).toFixed(2);
+		log(`Django view executed successfully (${status}) in ${execTime}s`, 'success');
 
 		// If this is a static file request, return it with appropriate metadata
 		if (isStaticFileRequest) {
