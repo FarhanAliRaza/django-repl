@@ -17,7 +17,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
 	switch (type) {
 		case 'init':
-			response = await handleInit();
+			response = await handleInit(payload?.isFirstLoad);
 			break;
 
 		case 'installPackage':

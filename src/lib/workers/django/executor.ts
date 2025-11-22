@@ -92,107 +92,12 @@ export async function executeDjangoView(
 
 	try {
 		if (!skipFileWrite) {
-			// Only rewrite files and clear caches on full refresh
+			// Only rewrite files on full refresh
 			log('Setting up Django environment...', 'info');
 			log(`Received ${Object.keys(files).length} files to execute`, 'info');
 
 			// Write files to virtual FS
 			await writeFilesToVirtualFS(files);
-
-			log('Clearing Python module cache and Django caches...', 'info');
-
-			// Clear the module cache to reload updated files
-			await pyodide.runPythonAsync(`
-import sys
-import gc
-
-# ============================================================================
-# 1. Clear Python Module Cache
-# ============================================================================
-# Dynamically determine which modules to clear based on INSTALLED_APPS
-modules_to_remove = []
-try:
-    from django.conf import settings
-    if settings.configured:
-        # Get custom apps from INSTALLED_APPS (exclude django.contrib.*)
-        for app in settings.INSTALLED_APPS:
-            if not app.startswith('django.'):
-                # Remove the app module and all submodules
-                modules_to_remove.extend([
-                    key for key in sys.modules.keys()
-                    if key == app or key.startswith(app + '.')
-                ])
-except:
-    pass
-
-# Fallback: also remove common module names
-for prefix in ['myapp', 'myproject', 'urls']:
-    modules_to_remove.extend([
-        key for key in sys.modules.keys()
-        if key == prefix or key.startswith(prefix + '.')
-    ])
-
-# Remove duplicates
-modules_to_remove = list(set(modules_to_remove))
-
-# Remove modules from cache
-for module in modules_to_remove:
-    if module in sys.modules:
-        del sys.modules[module]
-
-# Force garbage collection to clear any cached references
-gc.collect()
-
-# ============================================================================
-# 2. Clear Django URL Resolver Cache
-# ============================================================================
-try:
-    from django.urls import clear_url_caches
-    clear_url_caches()
-except:
-    pass
-
-# ============================================================================
-# 3. Clear Django Template Cache
-# ============================================================================
-try:
-    from django.template import engines
-    # Completely reset template engines to force reload from filesystem
-    engines._engines = {}
-except:
-    pass
-
-# ============================================================================
-# 4. Clear Django Admin Registry and Re-discover Admin Modules
-# ============================================================================
-try:
-    from django.contrib import admin
-    from django.conf import settings
-
-    # Only clear custom app models from registry, keep Django's built-in models
-    if hasattr(admin.site, '_registry'):
-        # Get list of custom apps (non-django.contrib apps)
-        custom_apps = [app for app in settings.INSTALLED_APPS if not app.startswith('django.contrib')]
-
-        # Remove only models from custom apps
-        models_to_remove = [
-            model for model in list(admin.site._registry.keys())
-            if model._meta.app_label in [app.split('.')[-1] for app in custom_apps]
-        ]
-
-        for model in models_to_remove:
-            del admin.site._registry[model]
-
-    # Clear custom actions (keep this as is since actions are usually custom)
-    admin.site._actions = {}
-
-    # Re-run admin autodiscovery to reload admin.py modules from custom apps
-    admin.autodiscover()
-except:
-    pass
-
-
-		`);
 		} else {
 			// Navigation only - just log the path change
 			log(`Navigating to ${viewPath}`, 'info');

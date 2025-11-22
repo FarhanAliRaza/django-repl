@@ -13,6 +13,106 @@
 	import { RefreshCw, Play } from '@lucide/svelte';
 
 	let worker: Worker | null = null;
+	let isFirstWorkerLoad = $state(true); // Track if this is the first worker load in this session
+
+	function createWorker() {
+		// Reset state when creating a new worker
+		executionState.resetState();
+
+		const newWorker = new Worker(new URL('$lib/workers/python-executor.ts', import.meta.url), {
+			type: 'module'
+		});
+
+		newWorker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+			const { type, payload } = event.data;
+
+			switch (type) {
+				case 'ready':
+					if (payload && 'success' in payload && payload.success === true) {
+						executionState.setWorkerReady();
+						executionState.addLog({
+							timestamp: Date.now(),
+							type: 'success',
+							message: 'Python environment ready'
+						});
+					} else {
+						executionState.addLog({
+							timestamp: Date.now(),
+							type: 'error',
+							message: 'Failed to initialize Python environment'
+						});
+					}
+					break;
+
+				case 'log':
+					if (payload && 'timestamp' in payload && 'type' in payload && 'message' in payload) {
+						executionState.addLog(payload);
+					}
+					break;
+
+				case 'result':
+					if (payload && 'success' in payload) {
+						executionState.setExecutionResult(payload);
+
+						// Handle migration files returned from makemigrations
+						if (payload.migrationFiles) {
+							console.log('✅ Received migration files from worker:', payload.migrationFiles);
+							console.log('📝 File paths:', Object.keys(payload.migrationFiles));
+							for (const [filePath, content] of Object.entries(payload.migrationFiles)) {
+								console.log(`📄 Adding file: ${filePath}`);
+								workspaceState.updateFile(filePath, content);
+								console.log(`✓ File added to workspace: ${filePath}`);
+							}
+							console.log('📂 Current workspace files:', Object.keys(workspaceState.files));
+						}
+
+						// Handle redirects (3xx status codes) - follow redirect with GET request
+						if (payload.status && payload.redirectTo) {
+							const statusCode = parseInt(payload.status.split(' ')[0]);
+							if (statusCode >= 300 && statusCode < 400) {
+								console.log(`Redirect ${statusCode}: Following redirect to ${payload.redirectTo}`);
+								// Update path and make GET request to redirect location
+								pathState.setPath(payload.redirectTo);
+								runCodeWithPath(payload.redirectTo);
+							}
+						}
+					}
+					break;
+
+				case 'error':
+					executionState.addLog({
+						timestamp: Date.now(),
+						type: 'error',
+						message:
+							(payload && 'message' in payload ? payload.message : undefined) || 'Unknown error'
+					});
+					executionState.isExecuting = false;
+					break;
+			}
+		};
+
+		newWorker.onerror = (error) => {
+			executionState.addLog({
+				timestamp: Date.now(),
+				type: 'error',
+				message: `Worker error: ${error.message}`
+			});
+			executionState.isExecuting = false;
+		};
+
+		// Initialize Pyodide with first load flag
+		newWorker.postMessage({
+			type: 'init',
+			payload: { isFirstLoad: isFirstWorkerLoad }
+		} as WorkerRequest);
+
+		// After first worker load, set flag to false for subsequent hot restarts
+		if (isFirstWorkerLoad) {
+			isFirstWorkerLoad = false;
+		}
+
+		return newWorker;
+	}
 
 	onMount(() => {
 		// Load saved files from localStorage
@@ -72,92 +172,7 @@
 
 		// Initialize worker
 		if (browser) {
-			// Reset state when creating a new worker (handles HMR reloads)
-			executionState.resetState();
-
-			worker = new Worker(new URL('$lib/workers/python-executor.ts', import.meta.url), {
-				type: 'module'
-			});
-
-			worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-				const { type, payload } = event.data;
-
-				switch (type) {
-					case 'ready':
-						if (payload && 'success' in payload && payload.success === true) {
-							executionState.setWorkerReady();
-							executionState.addLog({
-								timestamp: Date.now(),
-								type: 'success',
-								message: 'Python environment ready'
-							});
-						} else {
-							executionState.addLog({
-								timestamp: Date.now(),
-								type: 'error',
-								message: 'Failed to initialize Python environment'
-							});
-						}
-						break;
-
-					case 'log':
-						if (payload && 'timestamp' in payload && 'type' in payload && 'message' in payload) {
-							executionState.addLog(payload);
-						}
-						break;
-
-					case 'result':
-						if (payload && 'success' in payload) {
-							executionState.setExecutionResult(payload);
-
-							// Handle migration files returned from makemigrations
-							if (payload.migrationFiles) {
-								console.log('✅ Received migration files from worker:', payload.migrationFiles);
-								console.log('📝 File paths:', Object.keys(payload.migrationFiles));
-								for (const [filePath, content] of Object.entries(payload.migrationFiles)) {
-									console.log(`📄 Adding file: ${filePath}`);
-									workspaceState.updateFile(filePath, content);
-									console.log(`✓ File added to workspace: ${filePath}`);
-								}
-								console.log('📂 Current workspace files:', Object.keys(workspaceState.files));
-							}
-
-							// Handle redirects (3xx status codes) - follow redirect with GET request
-							if (payload.status && payload.redirectTo) {
-								const statusCode = parseInt(payload.status.split(' ')[0]);
-								if (statusCode >= 300 && statusCode < 400) {
-									console.log(`Redirect ${statusCode}: Following redirect to ${payload.redirectTo}`);
-									// Update path and make GET request to redirect location
-									pathState.setPath(payload.redirectTo);
-									runCodeWithPath(payload.redirectTo);
-								}
-							}
-						}
-						break;
-
-					case 'error':
-						executionState.addLog({
-							timestamp: Date.now(),
-							type: 'error',
-							message:
-								(payload && 'message' in payload ? payload.message : undefined) || 'Unknown error'
-						});
-						executionState.isExecuting = false;
-						break;
-				}
-			};
-
-			worker.onerror = (error) => {
-				executionState.addLog({
-					timestamp: Date.now(),
-					type: 'error',
-					message: `Worker error: ${error.message}`
-				});
-				executionState.isExecuting = false;
-			};
-
-			// Initialize Pyodide
-			worker.postMessage({ type: 'init' } as WorkerRequest);
+			worker = createWorker();
 		}
 
 		return () => {
@@ -293,36 +308,50 @@
 
 		const files = workspaceState.getFiles();
 
-		// Only log myapp/views.py with full content
-		console.group('🔄 Django Playground - Force Refresh');
+		console.group('🔄 Django Playground - Hot Restart');
+		console.log('💀 Killing old worker');
+		console.log('📦 Will restore from snapshot cache');
 
 		// Clear the lastFiles so it doesn't compare
 		lastFiles = {};
-
-		// Don't clear logs on refresh - preserve execution history
-		executionState.startExecution(false);
-
-		// Log what we're sending to worker - only views.py
 
 		// Log to user console
 		executionState.addLog({
 			timestamp: Date.now(),
 			type: 'info',
-			message: '🔄 Refreshing'
+			message: '🔄 Hot restarting worker...'
 		});
 
-		// Save to localStorage
-		// workspaceFiles.saveToLocalStorage(files);
+		// Kill the old worker
+		worker.terminate();
 
-		// Send files to worker with current path and cookies
-		worker.postMessage({
-			type: 'execute',
-			payload: {
-				files,
-				path: pathState.currentPath,
-				cookies: executionState.getCookies()
+		// Create a new worker (will restore from snapshot if available)
+		worker = createWorker();
+
+		// Wait for worker to be ready, then send files and execute
+		const waitForReady = () => {
+			if (executionState.replState === ReplState.IDLE) {
+				console.log('✅ Worker ready, sending files');
+				console.groupEnd();
+
+				executionState.startExecution(false);
+
+				worker?.postMessage({
+					type: 'execute',
+					payload: {
+						files,
+						path: pathState.currentPath,
+						cookies: executionState.getCookies()
+					}
+				} as WorkerRequest);
+			} else {
+				// Check again in 100ms
+				setTimeout(waitForReady, 100);
 			}
-		} as WorkerRequest);
+		};
+
+		// Start waiting for worker to be ready
+		waitForReady();
 	}
 
 	function runMigrations() {

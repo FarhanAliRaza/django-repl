@@ -1,11 +1,16 @@
 import type { WorkerRequest, WorkerResponse } from '$lib/types';
-import { initializePyodide, installDjango, installPackage } from '../pyodide-manager';
+import { initializePyodide, installDjango, installPackage, setFirstLoad } from '../pyodide-manager';
 import { executePython, executeDjangoView } from '../django/executor';
 import { runMigrations, makeMigrations, createSuperuser } from '../django/management';
 import { writeFilesToVirtualFS } from '../filesystem';
 import { log, getLogs } from '../logger';
 
-export async function handleInit(): Promise<WorkerResponse> {
+export async function handleInit(isFirstLoad?: boolean): Promise<WorkerResponse> {
+	// Set the first load flag if provided
+	if (isFirstLoad !== undefined) {
+		setFirstLoad(isFirstLoad);
+	}
+
 	const success = await initializePyodide();
 	if (success) {
 		await installDjango();

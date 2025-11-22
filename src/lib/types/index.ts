@@ -64,6 +64,7 @@ export interface WorkerRequest {
 		username?: string;
 		email?: string;
 		password?: string;
+		isFirstLoad?: boolean; // True if this is the first load of the session
 	};
 }
 
