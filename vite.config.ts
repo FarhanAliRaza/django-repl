@@ -6,6 +6,12 @@ import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), devtoolsJson()],
+	server: {
+		fs: {
+			// Allow serving files from the packages directory (monorepo setup)
+			allow: ['packages']
+		}
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

@@ -1,4 +1,5 @@
-import type { ExecutionResult, LogEntry } from '$lib/types';
+import type { ExecutionResult, LogEntry, HttpCookies } from '$lib/types';
+import { CookieStorage } from '$lib/utils/cookie-storage.svelte';
 
 export enum ReplState {
 	INITIALIZING = 'initializing',  // Python environment is loading
@@ -13,6 +14,12 @@ class ExecutionState {
 	executionResult = $state<ExecutionResult | null>(null);
 	logs = $state<LogEntry[]>([]);
 	isWorkerReady = $state(false);
+	cookieStorage: CookieStorage;
+
+	constructor() {
+		// Initialize cookie storage with localStorage persistence
+		this.cookieStorage = new CookieStorage();
+	}
 
 	addLog(entry: LogEntry) {
 		this.logs = [...this.logs, entry];
@@ -20,6 +27,29 @@ class ExecutionState {
 
 	clearLogs() {
 		this.logs = [];
+	}
+
+	/**
+	 * Get all cookies as an object to send with requests
+	 */
+	getCookies(): HttpCookies {
+		return this.cookieStorage.getAll();
+	}
+
+	/**
+	 * Process Set-Cookie headers from execution result
+	 */
+	processCookies(cookies: Array<{ name: string; value: string }>) {
+		for (const { name, value } of cookies) {
+			this.cookieStorage.set(name, value);
+		}
+	}
+
+	/**
+	 * Clear all cookies (e.g., for logout)
+	 */
+	clearCookies() {
+		this.cookieStorage.clear();
 	}
 
 	setWorkerReady() {
@@ -31,6 +61,11 @@ class ExecutionState {
 		this.executionResult = result;
 		this.isExecuting = false;
 		this.replState = ReplState.READY;
+
+		// Automatically process any cookies returned from the execution
+		if (result.cookies && result.cookies.length > 0) {
+			this.processCookies(result.cookies);
+		}
 	}
 
 	startExecution(clearLogs: boolean = false) {
