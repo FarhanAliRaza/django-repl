@@ -87,6 +87,62 @@ export const srcdocTemplate = `
 			}
 		});
 
+		// Intercept form submissions - use capture phase to ensure we catch it
+		document.addEventListener('submit', (event) => {
+			// Find the form element
+			let form = event.target;
+			if (!form || form.nodeName !== 'FORM') return;
+
+			// Prevent default form submission
+			event.preventDefault();
+			event.stopPropagation();
+
+			// Get form details
+			const action = form.getAttribute('action') || window.location.pathname;
+			const method = (form.getAttribute('method') || 'GET').toUpperCase();
+
+			// Collect form data
+			const formData = new FormData(form);
+			const formObject = {};
+			const headers = {};
+
+			// Convert FormData to plain object and extract CSRF token
+			let csrfToken = null;
+			for (const [key, value] of formData.entries()) {
+				formObject[key] = value;
+				if (key === 'csrfmiddlewaretoken') {
+					csrfToken = value;
+				}
+			}
+
+			// Set content type and CSRF header for POST requests
+			if (method === 'POST') {
+				headers['Content-Type'] = 'application/x-www-form-urlencoded';
+				// Add CSRF token as header (Django checks this)
+				if (csrfToken) {
+					headers['X-CSRFToken'] = csrfToken;
+				}
+				// Set referer to make Django's CSRF middleware happy
+				headers['Referer'] = window.location.href || 'http://localhost:8000';
+			}
+
+			console.log('Form submission intercepted:', {
+				action,
+				method,
+				data: formObject,
+				headers: headers
+			});
+
+			// Send form submission to parent for Django to handle
+			window.parent.postMessage({
+				type: 'formSubmit',
+				path: action,
+				method: method,
+				body: formObject,
+				headers: headers
+			}, '*');
+		}, true);
+
 		// Signal that iframe is ready
 		window.parent.postMessage({ type: 'ready' }, '*');
 	</script>

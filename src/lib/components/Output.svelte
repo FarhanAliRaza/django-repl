@@ -6,6 +6,14 @@
 	import { srcdocTemplate } from './srcdoc-template';
 	import * as Resizable from '$lib/components/ui/resizable/index.js';
 
+	interface Props {
+		onRunMigrations?: () => void;
+		onMakeMigrations?: () => void;
+		onCreateSuperuser?: () => void;
+	}
+
+	let { onRunMigrations, onMakeMigrations, onCreateSuperuser }: Props = $props();
+
 	let iframeElement = $state<HTMLIFrameElement | null>(null);
 	let iframeReady = $state(false);
 
@@ -33,6 +41,18 @@
 				window.dispatchEvent(
 					new CustomEvent('django-navigate', {
 						detail: { path: event.data.path }
+					})
+				);
+			} else if (event.data.type === 'formSubmit') {
+				console.log('Form submission requested:', event.data);
+				window.dispatchEvent(
+					new CustomEvent('django-form-submit', {
+						detail: {
+							path: event.data.path,
+							method: event.data.method,
+							body: event.data.body,
+							headers: event.data.headers
+						}
 					})
 				);
 			}
@@ -88,17 +108,13 @@
 							bind:this={iframeElement}
 							title="Django Output"
 							srcdoc={srcdocTemplate}
-							sandbox="allow-scripts"
+							sandbox="allow-scripts allow-forms allow-same-origin"
 							class="preview-frame"
 						></iframe>
 					{:else if executionState.executionResult?.error}
 						<div class="error-display">
 							<h3>Error</h3>
 							<pre>{executionState.executionResult.error}</pre>
-						</div>
-					{:else if executionState.executionResult?.output}
-						<div class="text-output">
-							<pre>{executionState.executionResult.output}</pre>
 						</div>
 					{:else}
 						<div class="empty-state">
@@ -112,7 +128,11 @@
 		</Resizable.Pane>
 		<Resizable.Handle withHandle={true} />
 		<Resizable.Pane defaultSize={30} minSize={20}>
-			<Console />
+			<Console
+				onRunMigrations={onRunMigrations}
+				onMakeMigrations={onMakeMigrations}
+				onCreateSuperuser={onCreateSuperuser}
+			/>
 		</Resizable.Pane>
 	</Resizable.PaneGroup>
 </div>
@@ -197,22 +217,5 @@
 		font-family: 'Consolas', 'Monaco', monospace;
 		font-size: 13px;
 		line-height: 1.6;
-	}
-
-	.text-output {
-		padding: 20px;
-		background: #1e1e1e;
-		color: #d4d4d4;
-		height: 100%;
-		overflow-y: auto;
-	}
-
-	.text-output pre {
-		margin: 0;
-		font-family: 'Consolas', 'Monaco', monospace;
-		font-size: 13px;
-		line-height: 1.6;
-		white-space: pre-wrap;
-		word-break: break-word;
 	}
 </style>

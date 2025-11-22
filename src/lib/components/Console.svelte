@@ -2,6 +2,14 @@
 	import { executionState } from '$lib/stores/execution.svelte';
 	import type { LogEntry } from '$lib/types';
 
+	interface Props {
+		onRunMigrations?: () => void;
+		onMakeMigrations?: () => void;
+		onCreateSuperuser?: () => void;
+	}
+
+	let { onRunMigrations, onMakeMigrations, onCreateSuperuser }: Props = $props();
+
 	function formatTime(timestamp: number): string {
 		return new Date(timestamp).toLocaleTimeString();
 	}
@@ -22,12 +30,39 @@
 	function clearConsole() {
 		executionState.clearLogs();
 	}
+
+	function handleMigrate() {
+		if (onRunMigrations) {
+			onRunMigrations();
+		}
+	}
+
+	function handleMakeMigrations() {
+		if (onMakeMigrations) {
+			onMakeMigrations();
+		}
+	}
+
+	function handleCreateSuperuser() {
+		if (onCreateSuperuser) {
+			onCreateSuperuser();
+		}
+	}
 </script>
 
 <div class="console">
 	<div class="console-header">
 		<span>Console</span>
-		<button class="clear-btn" onclick={clearConsole}>Clear</button>
+		<div class="console-actions">
+			<button class="action-btn django-btn" onclick={handleMakeMigrations}>
+				Make Migrations
+			</button>
+			<button class="action-btn django-btn" onclick={handleMigrate}>Migrate</button>
+			<button class="action-btn django-btn superuser-btn" onclick={handleCreateSuperuser}>
+				Create Superuser
+			</button>
+			<button class="action-btn clear-btn" onclick={clearConsole}>Clear</button>
+		</div>
 	</div>
 	<div class="console-content">
 		{#if executionState.logs.length === 0}
@@ -62,7 +97,12 @@
 		font-size: 13px;
 	}
 
-	.clear-btn {
+	.console-actions {
+		display: flex;
+		gap: 8px;
+	}
+
+	.action-btn {
 		background: transparent;
 		border: 1px solid #3e3e42;
 		color: #d4d4d4;
@@ -73,9 +113,30 @@
 		transition: all 0.2s;
 	}
 
-	.clear-btn:hover {
+	.action-btn:hover {
 		background: #3e3e42;
 		border-color: #565656;
+	}
+
+	.django-btn {
+		background: #0e639c;
+		border-color: #1177bb;
+		color: #ffffff;
+	}
+
+	.django-btn:hover {
+		background: #1177bb;
+		border-color: #1890d5;
+	}
+
+	.superuser-btn {
+		background: #44a047;
+		border-color: #5cb85c;
+	}
+
+	.superuser-btn:hover {
+		background: #5cb85c;
+		border-color: #6ec071;
 	}
 
 	.console-content {

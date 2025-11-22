@@ -26,6 +26,8 @@ export interface ExecutionResult {
 	html?: string;
 	logs: LogEntry[];
 	cookies?: Array<{ name: string; value: string }>; // Cookies to set
+	status?: string; // HTTP status code (e.g., "200 OK", "302 Found")
+	redirectTo?: string; // Location header for redirects
 }
 
 export interface LogEntry {
@@ -36,7 +38,14 @@ export interface LogEntry {
 
 // Worker message types
 export interface WorkerRequest {
-	type: 'init' | 'execute' | 'installPackage' | 'writeFiles';
+	type:
+		| 'init'
+		| 'execute'
+		| 'installPackage'
+		| 'writeFiles'
+		| 'runMigrations'
+		| 'makeMigrations'
+		| 'createSuperuser';
 	payload?: {
 		code?: string;
 		files?: Record<string, string>;
@@ -47,6 +56,9 @@ export interface WorkerRequest {
 		headers?: HttpHeaders; // HTTP headers
 		body?: string | Record<string, any>; // Request body (POST data)
 		cookies?: HttpCookies; // Cookies to send with request
+		username?: string;
+		email?: string;
+		password?: string;
 	};
 }
 

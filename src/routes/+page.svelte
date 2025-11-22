@@ -36,6 +36,20 @@
 			runCodeWithPath(event.detail.path);
 		};
 
+		// Listen for form submissions from iframe
+		const handleFormSubmit = (
+			event: CustomEvent<{
+				path: string;
+				method: string;
+				body: Record<string, any>;
+				headers: Record<string, string>;
+			}>
+		) => {
+			console.log('Form submission:', event.detail);
+			const { path, method, body, headers } = event.detail;
+			runCodeWithRequest(path, method, body, headers);
+		};
+
 		// Listen for editor save event (Ctrl+S / Cmd+S)
 		const handleEditorSave = () => {
 			if (executionState.replState === ReplState.READY) {
@@ -47,11 +61,13 @@
 
 		window.addEventListener('django-navigate', handleNavigation as EventListener);
 		window.addEventListener('address-bar-navigate', handleAddressBarNavigate as EventListener);
+		window.addEventListener('django-form-submit', handleFormSubmit as EventListener);
 		window.addEventListener('editor-save', handleEditorSave);
 
 		const cleanup = () => {
 			window.removeEventListener('django-navigate', handleNavigation as EventListener);
 			window.removeEventListener('address-bar-navigate', handleAddressBarNavigate as EventListener);
+			window.removeEventListener('django-form-submit', handleFormSubmit as EventListener);
 			window.removeEventListener('editor-save', handleEditorSave);
 		};
 
@@ -94,6 +110,17 @@
 					case 'result':
 						if (payload && 'success' in payload) {
 							executionState.setExecutionResult(payload);
+
+							// Handle redirects (3xx status codes) - follow redirect with GET request
+							if (payload.status && payload.redirectTo) {
+								const statusCode = parseInt(payload.status.split(' ')[0]);
+								if (statusCode >= 300 && statusCode < 400) {
+									console.log(`Redirect ${statusCode}: Following redirect to ${payload.redirectTo}`);
+									// Update path and make GET request to redirect location
+									pathState.setPath(payload.redirectTo);
+									runCodeWithPath(payload.redirectTo);
+								}
+							}
 						}
 						break;
 
@@ -150,6 +177,42 @@
 				files,
 				path,
 				skipFileWrite: true,
+				cookies: executionState.getCookies()
+			}
+		} as WorkerRequest);
+	}
+
+	function runCodeWithRequest(
+		path: string,
+		method: string,
+		body: Record<string, any>,
+		headers: Record<string, string>
+	) {
+		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+
+		console.log(`Running Django with ${method} request to ${path}`, { body, headers });
+
+		// Don't clear logs on form submission - preserve execution history
+		executionState.startExecution(false);
+
+		const files = $workspaceFiles;
+
+		// Save to localStorage
+		// workspaceFiles.saveToLocalStorage(files);
+
+		// Update path state
+		pathState.setPath(path);
+
+		// Send files to worker with skipFileWrite=true for POST requests (navigation only)
+		worker.postMessage({
+			type: 'execute',
+			payload: {
+				files,
+				path,
+				skipFileWrite: true,
+				method,
+				headers,
+				body,
 				cookies: executionState.getCookies()
 			}
 		} as WorkerRequest);
@@ -250,6 +313,62 @@
 			}
 		} as WorkerRequest);
 	}
+
+	function runMigrations() {
+		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+
+		const files = get(workspaceFiles);
+
+		executionState.addLog({
+			timestamp: Date.now(),
+			type: 'info',
+			message: 'Running migrations...'
+		});
+
+		worker.postMessage({
+			type: 'runMigrations',
+			payload: { files }
+		} as WorkerRequest);
+	}
+
+	function makeMigrations() {
+		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+
+		const files = get(workspaceFiles);
+
+		executionState.addLog({
+			timestamp: Date.now(),
+			type: 'info',
+			message: 'Making migrations...'
+		});
+
+		worker.postMessage({
+			type: 'makeMigrations',
+			payload: { files }
+		} as WorkerRequest);
+	}
+
+	function createSuperuser() {
+		if (!worker || executionState.replState === ReplState.INITIALIZING) return;
+
+		const files = get(workspaceFiles);
+
+		executionState.addLog({
+			timestamp: Date.now(),
+			type: 'info',
+			message: 'Creating superuser (admin/admin)...'
+		});
+
+		worker.postMessage({
+			type: 'createSuperuser',
+			payload: {
+				files,
+				username: 'admin',
+				email: 'admin@example.com',
+				password: 'admin'
+			}
+		} as WorkerRequest);
+	}
 </script>
 
 <div class="playground">
@@ -325,7 +444,11 @@
 			<Resizable.Handle withHandle={true} />
 			<Resizable.Pane defaultSize={50}>
 				<div class="right-pane">
-					<Output />
+					<Output
+						onRunMigrations={runMigrations}
+						onMakeMigrations={makeMigrations}
+						onCreateSuperuser={createSuperuser}
+					/>
 				</div>
 			</Resizable.Pane>
 		</Resizable.PaneGroup>
