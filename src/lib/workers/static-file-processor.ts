@@ -6,14 +6,12 @@ import { getPyodide } from './pyodide-manager';
  * Finds <link> and <script> tags pointing to /static/* and replaces them with inline content
  */
 export async function inlineStaticFiles(html: string): Promise<string> {
-	log('Starting static file inlining...', 'info', 'worker');
 	const pyodide = getPyodide();
 	if (!pyodide) {
 		log('Pyodide not initialized, skipping static file inlining', 'warning', 'worker');
 		return html;
 	}
 
-	log('Searching for static file references in HTML...', 'info', 'worker');
 	// Extract all stylesheet links
 	const linkRegex = /<link\s+[^>]*href=["']([^"']*\/static\/[^"']*)["'][^>]*>/gi;
 	const scriptRegex = /<script\s+[^>]*src=["']([^"']*\/static\/[^"']*)["'][^>]*><\/script>/gi;
@@ -30,21 +28,19 @@ export async function inlineStaticFiles(html: string): Promise<string> {
 	}
 
 	if (staticFileUrls.size === 0) {
-		log('No static files found to inline', 'info', 'worker');
 		return html; // No static files to inline
 	}
 
-	log(`Found ${staticFileUrls.size} static files to inline: ${Array.from(staticFileUrls).join(', ')}`, 'info', 'worker');
+	log(
+		`Found ${staticFileUrls.size} static files to inline: ${Array.from(staticFileUrls).join(', ')}`,
+		'info',
+		'worker'
+	);
 	const startFetch = performance.now();
 
-	log('Fetching static files in batch...', 'info', 'worker');
 	// Fetch all static files in one batch Python call (much faster than sequential WSGI requests)
 	const staticFiles = await fetchStaticFilesBatch(Array.from(staticFileUrls));
 
-	const fetchTime = ((performance.now() - startFetch) / 1000).toFixed(2);
-	log(`Static file fetch took ${fetchTime}s`, 'info', 'worker');
-
-	log('Replacing <link> tags with inline <style>...', 'info', 'worker');
 	// Replace <link> tags with inline <style>
 	html = html.replace(linkRegex, (fullMatch, url) => {
 		const file = staticFiles.get(url);
@@ -54,7 +50,6 @@ export async function inlineStaticFiles(html: string): Promise<string> {
 		return fullMatch; // Keep original if fetch failed
 	});
 
-	log('Replacing <script> tags with inline scripts...', 'info', 'worker');
 	// Replace <script src="..."> with inline <script>
 	html = html.replace(scriptRegex, (fullMatch, url) => {
 		const file = staticFiles.get(url);
@@ -65,7 +60,6 @@ export async function inlineStaticFiles(html: string): Promise<string> {
 	});
 
 	log(`Inlined ${staticFiles.size} static files successfully`, 'success', 'worker');
-	log('Static file inlining complete', 'success', 'worker');
 	return html;
 }
 

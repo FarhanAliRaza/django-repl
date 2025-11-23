@@ -25,12 +25,10 @@
 	onMount(() => {
 		const handleMessage = (event: MessageEvent) => {
 			if (event.data.type === 'ready') {
-				console.log('IFrame is ready');
 				iframeReady = true;
 
 				// If we already have HTML when iframe becomes ready, send it immediately
 				if (iframeElement && executionState.executionResult?.html) {
-					console.log('Sending existing HTML to newly ready iframe');
 					const message = {
 						type: 'update',
 						html: executionState.executionResult.html,
@@ -69,15 +67,6 @@
 
 	// Update iframe content reactively when result changes AND iframe is ready
 	$effect(() => {
-		console.log(
-			'Effect triggered - iframeReady:',
-			iframeReady,
-			'iframeElement:',
-			!!iframeElement,
-			'hasHtml:',
-			!!hasHtml
-		);
-
 		if (iframeElement && hasHtml && iframeReady) {
 			try {
 				const message = {
@@ -85,10 +74,7 @@
 					html: executionState.executionResult?.html || '',
 					currentPath: pathState.currentPath
 				};
-				console.log('Posting message:', message.type);
-
 				iframeElement.contentWindow?.postMessage(message, '*');
-				console.log('Message posted successfully');
 			} catch (e) {
 				console.error('Failed to update iframe:', e);
 			}
@@ -131,11 +117,7 @@
 		</Resizable.Pane>
 		<Resizable.Handle withHandle={true} />
 		<Resizable.Pane defaultSize={30} minSize={20}>
-			<Console
-				onRunMigrations={onRunMigrations}
-				onMakeMigrations={onMakeMigrations}
-				onCreateSuperuser={onCreateSuperuser}
-			/>
+			<Console {onRunMigrations} {onMakeMigrations} {onCreateSuperuser} />
 		</Resizable.Pane>
 	</Resizable.PaneGroup>
 </div>

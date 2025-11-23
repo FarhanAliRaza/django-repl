@@ -48,30 +48,29 @@
 			onCreateSuperuser();
 		}
 	}
+
+	$inspect(executionState.replState);
+
+	let disabled = $derived.by(() => {
+		if (executionState.replState == ReplState.READY || executionState.replState == ReplState.IDLE) {
+			return false;
+		}
+		return true;
+	});
 </script>
 
 <div class="console">
 	<div class="console-header">
 		<span>Console</span>
 		<div class="console-actions">
-			<button
-				class="action-btn django-btn"
-				onclick={handleMakeMigrations}
-				disabled={executionState.replState !== ReplState.IDLE}
-			>
+			<button class="action-btn django-btn" onclick={handleMakeMigrations} {disabled}>
 				Make Migrations
 			</button>
-			<button
-				class="action-btn django-btn"
-				onclick={handleMigrate}
-				disabled={executionState.replState !== ReplState.IDLE}
-			>
-				Migrate
-			</button>
+			<button class="action-btn django-btn" onclick={handleMigrate} {disabled}> Migrate </button>
 			<button
 				class="action-btn django-btn superuser-btn"
 				onclick={handleCreateSuperuser}
-				disabled={executionState.replState !== ReplState.IDLE}
+				{disabled}
 			>
 				Create Superuser
 			</button>

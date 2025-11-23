@@ -18,7 +18,6 @@ export const srcdocTemplate = `
 <body>
 	<div id="content"></div>
 	<script>
-		console.log('IFrame srcdoc loaded');
 
 		// Track the current Django path (received from parent)
 		let currentPath = '/';
@@ -30,18 +29,14 @@ export const srcdocTemplate = `
 				return;
 			}
 
-			console.log('IFrame received message:', event.data.type);
 
 			if (event.data.type === 'update') {
-				console.log('Updating content, HTML length:', event.data.html?.length);
 				// Update the current path if provided
 				if (event.data.currentPath) {
 					currentPath = event.data.currentPath;
-					console.log('Updated currentPath to:', currentPath);
 				}
 				// Update the content
 				document.getElementById('content').innerHTML = event.data.html;
-				console.log('Content updated');
 			}
 		});
 
@@ -134,12 +129,7 @@ export const srcdocTemplate = `
 				headers['Referer'] = window.location.href || 'http://localhost:8000';
 			}
 
-			console.log('Form submission intercepted:', {
-				action,
-				method,
-				data: formObject,
-				headers: headers
-			});
+			
 
 			// Send form submission to parent for Django to handle
 			window.parent.postMessage({

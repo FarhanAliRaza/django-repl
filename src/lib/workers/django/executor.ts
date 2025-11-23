@@ -99,8 +99,6 @@ export async function executeDjangoView(
 		// Always write files on first execution of this worker, even if skipFileWrite is true
 		if (!skipFileWrite || !filesWritten) {
 			const fileWriteStartTime = performance.now();
-			log('Setting up Django environment...', 'info');
-			log(`Received ${Object.keys(files).length} files to execute`, 'info');
 
 			// Write files to virtual FS
 			await writeFilesToVirtualFS(files);

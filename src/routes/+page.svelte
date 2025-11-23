@@ -6,7 +6,7 @@
 	import Output from '$lib/components/Output.svelte';
 	import { workspaceState } from '$lib/stores/workspace.svelte';
 	import { executionState, ReplState } from '$lib/stores/execution.svelte';
-	import type { WorkerRequest, WorkerResponse } from '$lib/types';
+	import type { WorkerResponse } from '$lib/types';
 	import * as Resizable from '$lib/components/ui/resizable/index.js';
 	import { Button } from '$lib/components/ui/button';
 	import { pathState } from '$lib/stores/path-state.svelte';
@@ -16,7 +16,11 @@
 
 	let workerPool: WorkerPool | null = null;
 	let currentWorkerId: string | null = $state(null);
-	let latestPendingRefresh: { files: Record<string, string>; path: string; timestamp: number } | null = $state(null);
+	let latestPendingRefresh: {
+		files: Record<string, string>;
+		path: string;
+		timestamp: number;
+	} | null = $state(null);
 	let isExecutingRefresh: boolean = $state(false); // Prevent concurrent refresh executions
 
 	// Message handler for worker pool responses
@@ -64,7 +68,12 @@
 					}
 
 					// Handle redirects (3xx status codes) - follow redirect with GET request
-					if ('status' in payload && 'redirectTo' in payload && payload.status && payload.redirectTo) {
+					if (
+						'status' in payload &&
+						'redirectTo' in payload &&
+						payload.status &&
+						payload.redirectTo
+					) {
 						const statusCode = parseInt(payload.status.split(' ')[0]);
 						if (statusCode >= 300 && statusCode < 400) {
 							console.log(`Redirect ${statusCode}: Following redirect to ${payload.redirectTo}`);
@@ -81,7 +90,8 @@
 					timestamp: Date.now(),
 					type: 'error',
 					message:
-						(payload && 'message' in payload ? String(payload.message) : undefined) || 'Unknown error'
+						(payload && 'message' in payload ? String(payload.message) : undefined) ||
+						'Unknown error'
 				});
 				executionState.isExecuting = false;
 				break;
@@ -106,14 +116,12 @@
 		workerPool.onWorkerReady = () => {
 			console.log('[WorkerPool] Worker ready event fired');
 			if (latestPendingRefresh && !isExecutingRefresh) {
-				console.log('[WorkerPool] Executing pending refresh');
 				const pending = latestPendingRefresh;
 				latestPendingRefresh = null;
 
 				// Use $state.snapshot() to remove Svelte Proxy added by $state storage
 				// When files are stored in $state variable, Svelte wraps them in Proxies
 				// which cannot be cloned by postMessage()
-				console.log('[WorkerPool] Using $state.snapshot to remove Svelte Proxy wrapper');
 				const clonedFiles = $state.snapshot(pending.files);
 
 				executeRefresh(clonedFiles, pending.path);
@@ -142,7 +150,6 @@
 
 		// Listen for navigation events from iframe
 		const handleNavigation = (event: CustomEvent<{ path: string }>) => {
-			console.log('Django navigation:', event.detail.path);
 			// Update path state and re-run Django
 			pathState.setPath(event.detail.path);
 			runCodeWithPath(event.detail.path);
@@ -150,7 +157,6 @@
 
 		// Listen for address bar navigation
 		const handleAddressBarNavigate = (event: CustomEvent<{ path: string }>) => {
-			console.log('Address bar navigation:', event.detail.path);
 			runCodeWithPath(event.detail.path);
 		};
 
@@ -163,7 +169,6 @@
 				headers: Record<string, string>;
 			}>
 		) => {
-			console.log('Form submission:', event.detail);
 			const { path, method, body, headers } = event.detail;
 			runCodeWithRequest(path, method as HttpMethod, body, headers);
 		};
@@ -206,8 +211,6 @@
 		if (!workerPool || !currentWorkerId || executionState.replState === ReplState.INITIALIZING)
 			return;
 
-		console.log(`Running Django with path: ${path}`);
-
 		// Don't clear logs on page navigation - preserve execution history
 		executionState.startExecution(false);
 
@@ -236,8 +239,6 @@
 	) {
 		if (!workerPool || !currentWorkerId || executionState.replState === ReplState.INITIALIZING)
 			return;
-
-		console.log(`Running Django with ${method} request to ${path}`, { body, headers });
 
 		// Don't clear logs on form submission - preserve execution history
 		executionState.startExecution(false);
@@ -274,11 +275,6 @@
 		const files = workspaceState.getFiles();
 		const currentFileName = workspaceState.currentFile;
 
-		// Log to browser console what changed
-		console.group('🔄 Django Playground - Running Code');
-		console.log('Total files:', Object.keys(files).length);
-		console.log('Current file:', currentFileName);
-
 		// Compare with last run to see what changed
 		const changedFiles: string[] = [];
 		for (const [path, content] of Object.entries(files)) {
@@ -287,28 +283,8 @@
 			}
 		}
 
-		if (changedFiles.length === 0 && Object.keys(lastFiles).length > 0) {
-			console.log('ℹ️  No files changed since last run');
-		}
-
-		console.groupEnd();
-
 		// Store current files for next comparison
 		lastFiles = { ...files };
-
-		// Log what we're about to execute (user console)
-		executionState.addLog({
-			timestamp: Date.now(),
-			type: 'info',
-			message: `Running with ${Object.keys(files).length} files`
-		});
-
-		// Log the current file being edited
-		executionState.addLog({
-			timestamp: Date.now(),
-			type: 'info',
-			message: `Current file: ${currentFileName}`
-		});
 
 		// Save to localStorage
 		// workspaceFiles.saveToLocalStorage(files);
@@ -334,10 +310,6 @@
 		}
 
 		isExecutingRefresh = true;
-		console.log('[executeRefresh] Execution lock acquired');
-
-		console.group('🔄 Django Playground - Worker Pool Swap');
-		console.log('🔄 Swapping to fresh worker from pool');
 
 		// Clear the lastFiles so it doesn't compare
 		lastFiles = {};
@@ -411,8 +383,6 @@
 			});
 			return;
 		}
-
-		console.log('[RefreshFiles] Refreshing with', Object.keys(files).length, 'files to path:', path);
 
 		// Check if a worker is ready
 		const readyWorker = workerPool.getReadyWorker();

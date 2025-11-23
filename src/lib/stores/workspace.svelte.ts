@@ -360,8 +360,6 @@ class WorkspaceState {
 
 	// Get all files as a plain object (for worker communication)
 	getFiles(): Record<string, string> {
-		console.log('[WorkspaceState] getFiles called');
-
 		// Defensive check: ensure files is an object
 		if (!this.files || typeof this.files !== 'object') {
 			console.error('[WorkspaceState] Invalid files state:', this.files);
@@ -371,10 +369,6 @@ class WorkspaceState {
 		// Use $state.snapshot() to extract plain values from Svelte reactive state
 		// This is the proper Svelte 5 way to remove Proxies
 		const snapshot = $state.snapshot(this.files);
-
-		console.log('[WorkspaceState] snapshot type:', typeof snapshot);
-		console.log('[WorkspaceState] snapshot keys count:', Object.keys(snapshot).length);
-		console.log('[WorkspaceState] snapshot sample keys:', Object.keys(snapshot).slice(0, 3));
 
 		return snapshot;
 	}
