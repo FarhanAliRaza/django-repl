@@ -6,7 +6,9 @@ import {
 	handleWriteFiles,
 	handleRunMigrations,
 	handleMakeMigrations,
-	handleCreateSuperuser
+	handleCreateSuperuser,
+	handleGetDatabase,
+	handleSetDatabase
 } from './handlers/message-handlers';
 
 // Handle incoming messages
@@ -80,6 +82,21 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 				response = {
 					type: 'error',
 					payload: { message: 'Missing required fields for superuser creation' }
+				};
+			}
+			break;
+
+		case 'getDatabase':
+			response = await handleGetDatabase();
+			break;
+
+		case 'setDatabase':
+			if (payload?.dbData) {
+				response = await handleSetDatabase(payload.dbData);
+			} else {
+				response = {
+					type: 'error',
+					payload: { message: 'No database data provided' }
 				};
 			}
 			break;

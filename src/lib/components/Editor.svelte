@@ -16,8 +16,8 @@
 
 	let editorElement: HTMLDivElement;
 	let editorView: EditorView | null = null;
-	let currentContent = $state('');
 	let lastLoadedFile = $state('');
+	let updateTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	// Update editor when file changes
 	$effect(() => {
@@ -26,21 +26,22 @@
 
 		if (editorView && file && file !== lastLoadedFile) {
 			const content = files[file] || '';
-			currentContent = content;
 			lastLoadedFile = file;
+
 			editorView.dispatch({
 				changes: {
 					from: 0,
 					to: editorView.state.doc.length,
 					insert: content
-				}
+				},
+				selection: { anchor: 0, head: 0 }
 			});
 		}
 	});
 
 	onMount(() => {
 		const initialContent = workspaceState.files[workspaceState.currentFile] || '';
-		currentContent = initialContent;
+		lastLoadedFile = workspaceState.currentFile;
 
 		const state = EditorState.create({
 			doc: initialContent,
@@ -58,8 +59,14 @@
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged) {
 						const newContent = update.state.doc.toString();
-						currentContent = newContent;
-						workspaceState.updateFile(workspaceState.currentFile, newContent);
+
+						// Debounce store updates to avoid updating on every keystroke
+						if (updateTimeout) {
+							clearTimeout(updateTimeout);
+						}
+						updateTimeout = setTimeout(() => {
+							workspaceState.updateFile(workspaceState.currentFile, newContent);
+						}, 300);
 					}
 				}),
 				EditorView.theme({
@@ -81,11 +88,17 @@
 		});
 
 		return () => {
+			if (updateTimeout) {
+				clearTimeout(updateTimeout);
+			}
 			editorView?.destroy();
 		};
 	});
 
 	onDestroy(() => {
+		if (updateTimeout) {
+			clearTimeout(updateTimeout);
+		}
 		editorView?.destroy();
 	});
 </script>

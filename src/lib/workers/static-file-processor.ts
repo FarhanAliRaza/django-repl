@@ -6,12 +6,14 @@ import { getPyodide } from './pyodide-manager';
  * Finds <link> and <script> tags pointing to /static/* and replaces them with inline content
  */
 export async function inlineStaticFiles(html: string): Promise<string> {
+	log('Starting static file inlining...', 'info', 'worker');
 	const pyodide = getPyodide();
 	if (!pyodide) {
-		log('Pyodide not initialized, skipping static file inlining', 'warning');
+		log('Pyodide not initialized, skipping static file inlining', 'warning', 'worker');
 		return html;
 	}
 
+	log('Searching for static file references in HTML...', 'info', 'worker');
 	// Extract all stylesheet links
 	const linkRegex = /<link\s+[^>]*href=["']([^"']*\/static\/[^"']*)["'][^>]*>/gi;
 	const scriptRegex = /<script\s+[^>]*src=["']([^"']*\/static\/[^"']*)["'][^>]*><\/script>/gi;
@@ -28,18 +30,21 @@ export async function inlineStaticFiles(html: string): Promise<string> {
 	}
 
 	if (staticFileUrls.size === 0) {
+		log('No static files found to inline', 'info', 'worker');
 		return html; // No static files to inline
 	}
 
-	log(`Found ${staticFileUrls.size} static files to inline`, 'info');
+	log(`Found ${staticFileUrls.size} static files to inline: ${Array.from(staticFileUrls).join(', ')}`, 'info', 'worker');
 	const startFetch = performance.now();
 
+	log('Fetching static files in batch...', 'info', 'worker');
 	// Fetch all static files in one batch Python call (much faster than sequential WSGI requests)
 	const staticFiles = await fetchStaticFilesBatch(Array.from(staticFileUrls));
 
 	const fetchTime = ((performance.now() - startFetch) / 1000).toFixed(2);
-	log(`Static file fetch took ${fetchTime}s`, 'info');
+	log(`Static file fetch took ${fetchTime}s`, 'info', 'worker');
 
+	log('Replacing <link> tags with inline <style>...', 'info', 'worker');
 	// Replace <link> tags with inline <style>
 	html = html.replace(linkRegex, (fullMatch, url) => {
 		const file = staticFiles.get(url);
@@ -49,6 +54,7 @@ export async function inlineStaticFiles(html: string): Promise<string> {
 		return fullMatch; // Keep original if fetch failed
 	});
 
+	log('Replacing <script> tags with inline scripts...', 'info', 'worker');
 	// Replace <script src="..."> with inline <script>
 	html = html.replace(scriptRegex, (fullMatch, url) => {
 		const file = staticFiles.get(url);
@@ -58,7 +64,8 @@ export async function inlineStaticFiles(html: string): Promise<string> {
 		return fullMatch; // Keep original if fetch failed
 	});
 
-	log(`Inlined ${staticFiles.size} static files successfully`, 'success');
+	log(`Inlined ${staticFiles.size} static files successfully`, 'success', 'worker');
+	log('Static file inlining complete', 'success', 'worker');
 	return html;
 }
 
@@ -68,20 +75,26 @@ export async function inlineStaticFiles(html: string): Promise<string> {
 async function fetchStaticFilesBatch(
 	urls: string[]
 ): Promise<Map<string, { content: string; contentType: string }>> {
+	log(`fetchStaticFilesBatch called with ${urls.length} URLs`, 'info', 'worker');
 	const pyodide = getPyodide();
 	if (!pyodide || urls.length === 0) {
+		log('Pyodide not available or no URLs, returning empty map', 'warning', 'worker');
 		return new Map();
 	}
 
 	try {
-		// Send all URLs to Python and fetch them using Django's staticfiles finders
-		const urlsJson = JSON.stringify(urls);
+		log('Setting static_urls in Pyodide globals...', 'info', 'worker');
+		// Pass URLs to Python via globals (safer than string interpolation)
+		pyodide.globals.set('static_urls', urls);
+
+		log('Running Python code to fetch static files...', 'info', 'worker');
 		const resultJson = await pyodide.runPythonAsync(`
 import json
 from django.contrib.staticfiles import finders
 from django.conf import settings
 
-urls = json.loads('${urlsJson.replace(/'/g, "\\'")}')
+# Get URLs from JavaScript (convert to Python list)
+urls = static_urls.to_py()
 results = {}
 
 for url in urls:
@@ -121,6 +134,7 @@ for url in urls:
 json.dumps(results)
 		`);
 
+		log('Python code executed, parsing results...', 'info', 'worker');
 		// Parse JSON result and convert to Map
 		const resultsObj = JSON.parse(resultJson);
 		const resultsMap = new Map<string, { content: string; contentType: string }>();
@@ -129,10 +143,11 @@ json.dumps(results)
 			resultsMap.set(url, fileData as { content: string; contentType: string });
 		}
 
-		log(`Fetched ${resultsMap.size} static files in batch`, 'success');
+		log(`Fetched ${resultsMap.size} static files in batch`, 'success', 'worker');
 		return resultsMap;
 	} catch (error) {
-		log(`Error fetching static files in batch: ${error}`, 'error');
+		log(`Error fetching static files in batch: ${error}`, 'error', 'worker');
+		console.error('Static file batch error:', error);
 		return new Map();
 	}
 }

@@ -58,7 +58,18 @@ class ExecutionState {
 	}
 
 	setExecutionResult(result: ExecutionResult) {
-		this.executionResult = result;
+		// Preserve existing HTML if the new result doesn't have HTML
+		// This prevents management commands (migrate, makemigrations, createSuperuser)
+		// from clearing the displayed HTML
+		if (result.html === undefined && this.executionResult?.html) {
+			this.executionResult = {
+				...result,
+				html: this.executionResult.html
+			};
+		} else {
+			this.executionResult = result;
+		}
+
 		this.isExecuting = false;
 		this.replState = ReplState.READY;
 
