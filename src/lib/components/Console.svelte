@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { executionState } from '$lib/stores/execution.svelte';
+	import { executionState, ReplState } from '$lib/stores/execution.svelte';
 	import type { LogEntry } from '$lib/types';
 
 	interface Props {
@@ -54,11 +54,25 @@
 	<div class="console-header">
 		<span>Console</span>
 		<div class="console-actions">
-			<button class="action-btn django-btn" onclick={handleMakeMigrations}>
+			<button
+				class="action-btn django-btn"
+				onclick={handleMakeMigrations}
+				disabled={executionState.replState !== ReplState.IDLE}
+			>
 				Make Migrations
 			</button>
-			<button class="action-btn django-btn" onclick={handleMigrate}>Migrate</button>
-			<button class="action-btn django-btn superuser-btn" onclick={handleCreateSuperuser}>
+			<button
+				class="action-btn django-btn"
+				onclick={handleMigrate}
+				disabled={executionState.replState !== ReplState.IDLE}
+			>
+				Migrate
+			</button>
+			<button
+				class="action-btn django-btn superuser-btn"
+				onclick={handleCreateSuperuser}
+				disabled={executionState.replState !== ReplState.IDLE}
+			>
 				Create Superuser
 			</button>
 			<button class="action-btn clear-btn" onclick={clearConsole}>Clear</button>
@@ -113,9 +127,14 @@
 		transition: all 0.2s;
 	}
 
-	.action-btn:hover {
+	.action-btn:hover:not(:disabled) {
 		background: #3e3e42;
 		border-color: #565656;
+	}
+
+	.action-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	.django-btn {
@@ -124,7 +143,7 @@
 		color: #ffffff;
 	}
 
-	.django-btn:hover {
+	.django-btn:hover:not(:disabled) {
 		background: #1177bb;
 		border-color: #1890d5;
 	}
@@ -134,7 +153,7 @@
 		border-color: #5cb85c;
 	}
 
-	.superuser-btn:hover {
+	.superuser-btn:hover:not(:disabled) {
 		background: #5cb85c;
 		border-color: #6ec071;
 	}
