@@ -91,27 +91,20 @@
 		executionState.resetState();
 
 		workerPool = new WorkerPool(2); // Create pool with 2 workers
-		await workerPool.initialize((message) => {
-			executionState.addLog({
-				timestamp: Date.now(),
-				type: 'info',
-				message
-			});
-		});
+
+		await workerPool.initialize(
+			(message) => {
+				// Log worker pool operations to browser console only (not user Console)
+				console.log(message);
+			},
+			handleWorkerMessage // Pass the message handler so first worker can receive Django logs
+		);
 
 		// Get the first ready worker
 		const readyWorker = workerPool.getReadyWorker();
 		if (readyWorker) {
 			currentWorkerId = readyWorker.id;
-			readyWorker.messageHandler = handleWorkerMessage;
-			// CRITICAL: Attach event listener to actually receive messages from the worker
-			const eventListener = (event: MessageEvent<WorkerResponse>) => {
-				if (readyWorker.messageHandler) {
-					readyWorker.messageHandler(event.data);
-				}
-			};
-			readyWorker.eventListener = eventListener;
-			readyWorker.worker.addEventListener('message', eventListener);
+			// Message handler and event listener already set during initialization
 		}
 
 		// Mark worker as ready - this transitions state from INITIALIZING → IDLE
@@ -333,11 +326,8 @@
 			currentWorkerId,
 			handleWorkerMessage,
 			(message) => {
-				executionState.addLog({
-					timestamp: Date.now(),
-					type: 'info',
-					message
-				});
+				// Log worker pool operations to browser console only (not user Console)
+				console.log(message);
 			}
 		);
 

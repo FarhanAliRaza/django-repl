@@ -23,22 +23,33 @@ export class WorkerPool {
 
 	/**
 	 * Initialize the worker pool with pre-warmed workers
+	 * First worker is awaited, then second worker warms in background
 	 */
-	async initialize(onLog?: (message: string) => void): Promise<void> {
+	async initialize(
+		onLog?: (message: string) => void,
+		onMessage?: (response: WorkerResponse) => void
+	): Promise<void> {
 		onLog?.('Initializing worker pool...');
-		// Start warming up workers
-		const warmPromises: Promise<void>[] = [];
-		for (let i = 0; i < this.poolSize; i++) {
-			warmPromises.push(this.createAndWarmWorker(onLog));
+
+		// Warm first worker and wait for it (this becomes the active worker)
+		await this.createAndWarmWorker(onLog, onMessage);
+		onLog?.('First worker ready, warming additional workers in background...');
+
+		// Warm remaining workers in background (don't await)
+		for (let i = 1; i < this.poolSize; i++) {
+			this.createAndWarmWorker(onLog).catch((err) => {
+				onLog?.(`Failed to warm background worker: ${err.message}`);
+			});
 		}
-		await Promise.all(warmPromises);
-		onLog?.(`Worker pool initialized with ${this.poolSize} workers`);
 	}
 
 	/**
 	 * Create a new worker and start warming it up
 	 */
-	private async createAndWarmWorker(onLog?: (message: string) => void): Promise<void> {
+	private async createAndWarmWorker(
+		onLog?: (message: string) => void,
+		onMessage?: (response: WorkerResponse) => void
+	): Promise<void> {
 		// Get the next available ID (reuse from terminated workers)
 		const workerId = this.availableIds.size > 0
 			? Array.from(this.availableIds)[0]
@@ -57,11 +68,27 @@ export class WorkerPool {
 			state: 'warming'
 		};
 
+		// Set message handler if provided (for first worker during initialization)
+		if (onMessage) {
+			pooledWorker.messageHandler = onMessage;
+		}
+
 		this.workers.set(id, pooledWorker);
 		onLog?.(`Starting to warm worker ${id}...`);
 
 		// Wait for worker to be ready
 		await this.warmWorker(pooledWorker, onLog);
+
+		// Attach permanent event listener if message handler was set
+		if (pooledWorker.messageHandler) {
+			const eventListener = (event: MessageEvent<WorkerResponse>) => {
+				if (pooledWorker.messageHandler) {
+					pooledWorker.messageHandler(event.data);
+				}
+			};
+			pooledWorker.eventListener = eventListener;
+			pooledWorker.worker.addEventListener('message', eventListener);
+		}
 	}
 
 	/**
@@ -83,10 +110,10 @@ export class WorkerPool {
 					clearTimeout(timeout);
 					pooledWorker.state = 'ready';
 					onLog?.(`Worker ${pooledWorker.id} is ready`);
-					// Only use isFirstLoad for the first worker
-					this.isFirstLoad = false;
 					// Remove warmup listener to prevent duplicate messages
 					pooledWorker.worker.removeEventListener('message', messageHandler);
+					// Only use isFirstLoad for the first worker - set AFTER resolve to ensure snapshot is complete
+					this.isFirstLoad = false;
 					resolve();
 				} else if (response.type === 'error') {
 					clearTimeout(timeout);

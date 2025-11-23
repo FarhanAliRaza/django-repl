@@ -4,12 +4,12 @@ import { getPyodide } from './pyodide-manager';
 export async function writeFilesToVirtualFS(files: Record<string, string>) {
 	const pyodide = getPyodide();
 	if (!pyodide) {
-		log('Pyodide not initialized', 'error');
+		log('Pyodide not initialized', 'error', 'worker');
 		return false;
 	}
 
 	try {
-		log(`Writing ${Object.keys(files).length} files to virtual filesystem...`, 'info');
+		log(`Writing ${Object.keys(files).length} files to virtual filesystem...`, 'info', 'worker');
 
 		for (const [filepath, content] of Object.entries(files)) {
 			// Create directory structure if needed
@@ -29,10 +29,10 @@ export async function writeFilesToVirtualFS(files: Record<string, string>) {
 			pyodide.FS.writeFile(filepath, content);
 		}
 
-		log('Files written successfully', 'success');
+		log('Files written successfully', 'success', 'worker');
 		return true;
 	} catch (error) {
-		log(`Failed to write files: ${error}`, 'error');
+		log(`Failed to write files: ${error}`, 'error', 'worker');
 		return false;
 	}
 }
@@ -40,7 +40,7 @@ export async function writeFilesToVirtualFS(files: Record<string, string>) {
 export async function getDatabaseFromVirtualFS(): Promise<Uint8Array | null> {
 	const pyodide = getPyodide();
 	if (!pyodide) {
-		log('Pyodide not initialized', 'error');
+		log('Pyodide not initialized', 'error', 'worker');
 		return null;
 	}
 
@@ -73,26 +73,26 @@ json.dumps({'root_files': root_files, 'db_info': db_info})
 			`);
 
 			const debugInfo = JSON.parse(result);
-			log(`Root directory files: ${debugInfo.root_files.join(', ')}`, 'info');
-			log(`Database info: ${JSON.stringify(debugInfo.db_info)}`, 'info');
+			log(`Root directory files: ${debugInfo.root_files.join(', ')}`, 'info', 'worker');
+			log(`Database info: ${JSON.stringify(debugInfo.db_info)}`, 'info', 'worker');
 		} catch (debugError) {
-			log(`Debug listing failed: ${debugError}`, 'warning');
+			log(`Debug listing failed: ${debugError}`, 'warning', 'worker');
 		}
 
 		// Check if database exists
 		try {
 			pyodide.FS.stat(dbPath);
 		} catch (e) {
-			log(`Database file not found at ${dbPath}`, 'warning');
+			log(`Database file not found at ${dbPath}`, 'warning', 'worker');
 			return null;
 		}
 
 		// Read database file as binary data
 		const dbData = pyodide.FS.readFile(dbPath, { encoding: 'binary' });
-		log(`Database file read successfully (${dbData.length} bytes)`, 'success');
+		log(`Database file read successfully (${dbData.length} bytes)`, 'success', 'worker');
 		return dbData;
 	} catch (error) {
-		log(`Failed to read database: ${error}`, 'error');
+		log(`Failed to read database: ${error}`, 'error', 'worker');
 		return null;
 	}
 }
@@ -100,7 +100,7 @@ json.dumps({'root_files': root_files, 'db_info': db_info})
 export async function setDatabaseToVirtualFS(dbData: Uint8Array): Promise<boolean> {
 	const pyodide = getPyodide();
 	if (!pyodide) {
-		log('Pyodide not initialized', 'error');
+		log('Pyodide not initialized', 'error', 'worker');
 		return false;
 	}
 
@@ -108,19 +108,19 @@ export async function setDatabaseToVirtualFS(dbData: Uint8Array): Promise<boolea
 		const dbPath = '/db.sqlite3';
 		// Write database file as binary data
 		pyodide.FS.writeFile(dbPath, dbData, { encoding: 'binary' });
-		log(`Database file written successfully (${dbData.length} bytes)`, 'success');
+		log(`Database file written successfully (${dbData.length} bytes)`, 'success', 'worker');
 
 		// Verify the file was written correctly
 		try {
 			const stat = pyodide.FS.stat(dbPath);
-			log(`Verified database file exists with size: ${stat.size} bytes`, 'success');
+			log(`Verified database file exists with size: ${stat.size} bytes`, 'success', 'worker');
 		} catch (e) {
-			log(`Warning: Could not verify database file after write`, 'warning');
+			log(`Warning: Could not verify database file after write`, 'warning', 'worker');
 		}
 
 		return true;
 	} catch (error) {
-		log(`Failed to write database: ${error}`, 'error');
+		log(`Failed to write database: ${error}`, 'error', 'worker');
 		return false;
 	}
 }

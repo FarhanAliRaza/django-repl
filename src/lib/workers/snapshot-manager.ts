@@ -88,7 +88,8 @@ export async function createSnapshot(
 	djangoVersion: string
 ): Promise<boolean> {
 	try {
-		log('Creating Pyodide snapshot...', 'info');
+		// This is an internal operation - log to browser console only
+		console.log('Creating Pyodide snapshot...');
 
 		// Create a tar archive of site-packages using Python's tarfile module
 		const archiveBytes = await pyodide.runPythonAsync(`
@@ -135,15 +136,14 @@ tar_buffer.read()
 			const request = store.put(snapshotData, key);
 
 			request.onsuccess = () => {
-				log(
-					`Snapshot created successfully (${(archive.length / 1024 / 1024).toFixed(2)} MB)`,
-					'success'
+				console.log(
+					`Snapshot created successfully (${(archive.length / 1024 / 1024).toFixed(2)} MB)`
 				);
 				resolve(true);
 			};
 
 			request.onerror = () => {
-				log(`Failed to store snapshot: ${request.error}`, 'error');
+				console.error(`Failed to store snapshot: ${request.error}`);
 				reject(new Error(`Failed to store snapshot: ${request.error}`));
 			};
 
@@ -152,7 +152,7 @@ tar_buffer.read()
 			};
 		});
 	} catch (error) {
-		log(`Failed to create snapshot: ${error}`, 'error');
+		console.error(`Failed to create snapshot: ${error}`);
 		return false;
 	}
 }
@@ -165,7 +165,8 @@ export async function restoreSnapshot(
 	djangoVersion: string
 ): Promise<boolean> {
 	try {
-		log('Restoring Pyodide snapshot from cache...', 'info');
+		// This is an internal operation - log to browser console only
+		console.log('Restoring Pyodide snapshot from cache...');
 
 		const db = await openDB();
 		const transaction = db.transaction([STORE_NAME], 'readonly');
@@ -236,17 +237,16 @@ except ImportError:
 }
 		`);
 
-		// Log debug info
+		// Log debug info to browser console
 		const debugInfo = verifyResult.toJs({ dict_converter: Object.fromEntries });
 		const ageInMinutes = Math.round((Date.now() - snapshotData.metadata.timestamp) / 60000);
-		log(
-			`Snapshot restored (${ageInMinutes}m ago): Django ${debugInfo.django_found ? 'v' + debugInfo.django_version : 'NOT FOUND'}`,
-			debugInfo.django_found ? 'success' : 'error'
+		console.log(
+			`Snapshot restored (${ageInMinutes}m ago): Django ${debugInfo.django_found ? 'v' + debugInfo.django_version : 'NOT FOUND'}`
 		);
 
 		return true;
 	} catch (error) {
-		log(`Failed to restore snapshot: ${error}`, 'warning');
+		console.warn(`Failed to restore snapshot: ${error}`);
 		return false;
 	}
 }

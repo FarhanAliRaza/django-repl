@@ -38,6 +38,7 @@ export interface LogEntry {
 	timestamp: number;
 	type: 'info' | 'warning' | 'error' | 'success';
 	message: string;
+	category?: 'worker' | 'django'; // 'worker' for internal debug logs, 'django' for user-facing logs
 }
 
 // Worker message types
