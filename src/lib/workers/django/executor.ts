@@ -303,7 +303,6 @@ output
 		// Process HTML to inline static files before returning
 		let processedHtml = html;
 		if (html && responseContentType?.includes('text/html')) {
-			log('Processing HTML to inline static files...', 'info');
 			processedHtml = await inlineStaticFiles(html);
 		}
 

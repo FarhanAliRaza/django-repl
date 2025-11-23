@@ -7,6 +7,7 @@ interface PooledWorker {
 	worker: Worker;
 	state: WorkerState;
 	messageHandler?: (response: WorkerResponse) => void;
+	eventListener?: (event: MessageEvent<WorkerResponse>) => void;
 }
 
 export class WorkerPool {
@@ -14,6 +15,7 @@ export class WorkerPool {
 	private poolSize: number;
 	private nextId = 0;
 	private isFirstLoad = true;
+	private availableIds: Set<number> = new Set([0, 1]); // Track available worker IDs for reuse
 
 	constructor(poolSize = 2) {
 		this.poolSize = poolSize;
@@ -37,7 +39,14 @@ export class WorkerPool {
 	 * Create a new worker and start warming it up
 	 */
 	private async createAndWarmWorker(onLog?: (message: string) => void): Promise<void> {
-		const id = `worker-${this.nextId++}`;
+		// Get the next available ID (reuse from terminated workers)
+		const workerId = this.availableIds.size > 0
+			? Array.from(this.availableIds)[0]
+			: this.nextId++;
+
+		this.availableIds.delete(workerId);
+		const id = `worker-${workerId}`;
+
 		const worker = new Worker(new URL('./workers/python-executor.ts', import.meta.url), {
 			type: 'module'
 		});
@@ -76,15 +85,22 @@ export class WorkerPool {
 					onLog?.(`Worker ${pooledWorker.id} is ready`);
 					// Only use isFirstLoad for the first worker
 					this.isFirstLoad = false;
+					// Remove warmup listener to prevent duplicate messages
+					pooledWorker.worker.removeEventListener('message', messageHandler);
 					resolve();
 				} else if (response.type === 'error') {
 					clearTimeout(timeout);
 					onLog?.(`Worker ${pooledWorker.id} failed to warm up`);
+					// Remove warmup listener on error
+					pooledWorker.worker.removeEventListener('message', messageHandler);
 					reject(new Error('Worker initialization failed'));
 				} else if (response.type === 'log') {
-					// Forward logs if handler is set
+					// Forward logs during warmup if handler is set, otherwise use onLog callback
 					if (pooledWorker.messageHandler) {
 						pooledWorker.messageHandler(response);
+					} else if (onLog && response.payload && 'message' in response.payload) {
+						// Forward log message to onLog callback during warmup
+						onLog(String(response.payload.message));
 					}
 				}
 			};
@@ -156,20 +172,42 @@ export class WorkerPool {
 				await this.setDatabaseToWorker(readyWorker, dbData);
 			}
 
-			// Set up message handler for this worker
+			// Terminate old worker (it has stale state) and create a fresh one
+			if (currentWorkerId) {
+				const oldWorker = this.workers.get(currentWorkerId);
+				if (oldWorker) {
+					// Remove event listener if it exists
+					if (oldWorker.eventListener) {
+						oldWorker.worker.removeEventListener('message', oldWorker.eventListener);
+					}
+					// Terminate the worker to free resources
+					oldWorker.worker.terminate();
+					// Remove from pool
+					this.workers.delete(currentWorkerId);
+					// Return the worker ID to available pool for reuse
+					const workerId = parseInt(currentWorkerId.replace('worker-', ''));
+					this.availableIds.add(workerId);
+					onLog?.(`Terminated ${currentWorkerId} (stale state)`);
+				}
+			}
+
+			// Set up message handler for the new active worker
 			readyWorker.messageHandler = onMessage;
-			readyWorker.worker.addEventListener('message', (event: MessageEvent<WorkerResponse>) => {
+			const eventListener = (event: MessageEvent<WorkerResponse>) => {
 				if (readyWorker.messageHandler) {
 					readyWorker.messageHandler(event.data);
 				}
-			});
+			};
+			readyWorker.eventListener = eventListener;
+			readyWorker.worker.addEventListener('message', eventListener);
 
 			readyWorker.state = 'ready';
 			onLog?.(`Successfully swapped to worker ${readyWorker.id}`);
 
-			// Start warming a new worker in the background to replace this one
+			// Create a fresh worker to replace the terminated one
+			onLog?.(`Creating fresh worker to replace terminated ${currentWorkerId}...`);
 			this.createAndWarmWorker(onLog).catch((err) => {
-				onLog?.(`Failed to warm replacement worker: ${err.message}`);
+				onLog?.(`Failed to create replacement worker: ${err.message}`);
 			});
 
 			return readyWorker.id;
@@ -186,6 +224,7 @@ export class WorkerPool {
 	private async getDatabaseFromWorker(worker: PooledWorker): Promise<Uint8Array | null> {
 		return new Promise((resolve) => {
 			const timeout = setTimeout(() => {
+				console.warn(`[WorkerPool] Timeout getting database from ${worker.id}`);
 				resolve(null);
 			}, 10000); // 10 second timeout
 
@@ -195,10 +234,16 @@ export class WorkerPool {
 					clearTimeout(timeout);
 					worker.worker.removeEventListener('message', messageHandler);
 					const payload = response.payload as { dbData: Uint8Array };
+					if (payload.dbData) {
+						console.log(`[WorkerPool] Got database from ${worker.id}: ${payload.dbData.length} bytes`);
+					} else {
+						console.log(`[WorkerPool] No database data from ${worker.id}`);
+					}
 					resolve(payload.dbData);
 				} else if (response.type === 'error') {
 					clearTimeout(timeout);
 					worker.worker.removeEventListener('message', messageHandler);
+					console.error(`[WorkerPool] Error getting database from ${worker.id}`);
 					resolve(null);
 				}
 			};
@@ -258,7 +303,10 @@ export class WorkerPool {
 		dbData: Uint8Array
 	): Promise<boolean> {
 		return new Promise((resolve) => {
+			console.log(`[WorkerPool] Setting database to ${worker.id}: ${dbData.length} bytes`);
+
 			const timeout = setTimeout(() => {
+				console.warn(`[WorkerPool] Timeout setting database to ${worker.id}`);
 				resolve(false);
 			}, 10000); // 10 second timeout
 
@@ -268,10 +316,12 @@ export class WorkerPool {
 					clearTimeout(timeout);
 					worker.worker.removeEventListener('message', messageHandler);
 					const payload = response.payload as { success: boolean };
+					console.log(`[WorkerPool] Database set to ${worker.id}: ${payload.success ? 'success' : 'failed'}`);
 					resolve(payload.success);
 				} else if (response.type === 'error') {
 					clearTimeout(timeout);
 					worker.worker.removeEventListener('message', messageHandler);
+					console.error(`[WorkerPool] Error setting database to ${worker.id}`);
 					resolve(false);
 				}
 			};

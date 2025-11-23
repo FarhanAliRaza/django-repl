@@ -104,7 +104,18 @@
 		if (readyWorker) {
 			currentWorkerId = readyWorker.id;
 			readyWorker.messageHandler = handleWorkerMessage;
+			// CRITICAL: Attach event listener to actually receive messages from the worker
+			const eventListener = (event: MessageEvent<WorkerResponse>) => {
+				if (readyWorker.messageHandler) {
+					readyWorker.messageHandler(event.data);
+				}
+			};
+			readyWorker.eventListener = eventListener;
+			readyWorker.worker.addEventListener('message', eventListener);
 		}
+
+		// Mark worker as ready - this transitions state from INITIALIZING → IDLE
+		executionState.setWorkerReady();
 	}
 
 	onMount(() => {
@@ -342,6 +353,7 @@
 				payload: {
 					files,
 					path: pathState.currentPath,
+					skipFileWrite: true, // Files already transferred during swap
 					cookies: executionState.getCookies()
 				}
 			});
