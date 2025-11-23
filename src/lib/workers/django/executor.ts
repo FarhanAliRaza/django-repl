@@ -281,8 +281,8 @@ output
 		const error = result.get('error');
 		const html = result.get('html');
 		const status = result.get('status');
-		const pyHeaders = result.toJs().get('headers') || [];
-		const timings = result.toJs().get('timings') || {};
+		const pyHeaders = result.get('headers')?.toJs() || [];
+		const timings = result.get('timings')?.toJs() || {};
 
 		// Log Python execution timings
 		if (Object.keys(timings).length > 0) {

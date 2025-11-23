@@ -6,7 +6,7 @@
 
 Django Playground is an experimental browser-based IDE that runs Django using Pyodide (Python in WebAssembly). This is a first version exploring what's possible with Django in the browser - no server required.
 
-⚠️ **Experimental Status**: This is an early prototype. Core Django features like views, templates, and URL routing work, but advanced features like migrations, ORM models, and database operations have not been tested yet.
+⚠️ **Experimental Status**: This is an early prototype exploring what's possible with Django in the browser. Core features work well, but some advanced functionality may have edge cases.
 
 ## Features
 
@@ -14,24 +14,30 @@ Django Playground is an experimental browser-based IDE that runs Django using Py
 - **Live Code Editor** - CodeMirror-based Python editor with syntax highlighting
 - **File Tree Explorer** - Manage your Django project files visually
 - **Instant Preview** - See your Django app rendered in real-time
+- **Database Support** - SQLite3 database running in-browser with migrations
+- **Admin Interface** - Full Django admin panel (with migrations + superuser setup)
+- **Session Management** - Cookie-based sessions with localStorage persistence
 - **SPA Navigation** - Seamless page transitions without full reloads
+- **Worker Pool** - Optimized with snapshot caching for fast reloads
 - **No Backend Needed** - Everything runs client-side in WebAssembly
 
-## What's Tested
+## What Works
 
 ✅ Django views and URL routing
-✅ Template rendering
-✅ Basic Django settings
+✅ Template rendering with context
+✅ Database migrations (makemigrations, migrate)
+✅ ORM models and basic queries
+✅ Admin interface (create superuser via UI button)
+✅ Cookie-based sessions and authentication
 ✅ File-based project structure
+✅ Worker pool with snapshot optimization
 
-## What's Not Tested Yet
+## Known Limitations
 
-❌ Database migrations
-❌ ORM models and queries
-❌ Forms and validation
-❌ Admin interface
-❌ Authentication system
-❌ Static files handling
+⚠️ Complex ORM queries may have edge cases
+⚠️ Forms and validation (not extensively tested)
+⚠️ Static files handling (partial implementation)
+⚠️ Advanced Django features may be untested
 
 ## Quick Start
 
@@ -70,10 +76,13 @@ pnpm run format       # Format code
 ## How it Works
 
 1. **Editor** - Write Django code in the CodeMirror editor
-2. **Web Worker** - Code runs in a dedicated Web Worker thread
-3. **Pyodide** - Python interpreter executes Django WSGI handler
-4. **Virtual FS** - Files stored in Pyodide's virtual filesystem
-5. **Preview** - HTML output rendered in sandboxed iframe
+2. **Web Worker Pool** - Code runs in dedicated Web Worker threads (pooled and reused)
+3. **Pyodide** - Python 3.13 interpreter executes Django via WSGI handler
+4. **Virtual FS** - Files stored in Pyodide's in-memory filesystem
+5. **Snapshot Caching** - IndexedDB caches Pyodide+Django for fast worker initialization
+6. **Preview** - HTML output rendered in sandboxed iframe
+
+**Performance**: First load takes ~10s to install Django. Subsequent workers restore from cache in ~2s thanks to the snapshot system.
 
 ## Project Structure
 

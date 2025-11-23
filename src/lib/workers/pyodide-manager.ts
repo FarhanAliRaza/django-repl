@@ -4,7 +4,7 @@ import { hasSnapshot, createSnapshot, restoreSnapshot } from './snapshot-manager
 let pyodide: any = null;
 let djangoInstalled = false;
 let isFirstLoad = true; // Will be set by the init message via setFirstLoad()
-const DJANGO_VERSION = '5.0.1'; // Track Django version for snapshot versioning
+const DJANGO_VERSION = '5.2'; // Track Django version for snapshot versioning (Python 3.13 compatible)
 
 console.log('[pyodide-manager] Module loaded with isFirstLoad:', isFirstLoad);
 
@@ -13,10 +13,11 @@ export async function initializePyodide() {
 		log('Loading Pyodide...', 'info', 'django');
 
 		// Load Pyodide dynamically using import for ES modules
-		const pyodideModule = await import('https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.mjs');
+		// Using .mjs version because this runs in a Web Worker (strict ES module environment)
+		const pyodideModule = await import('https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.mjs');
 
 		pyodide = await pyodideModule.loadPyodide({
-			indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/'
+			indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/'
 		});
 
 		log('Pyodide loaded successfully', 'success', 'django');

@@ -10,8 +10,8 @@ Django Playground is an experimental browser-based IDE that runs Django entirely
 
 - SvelteKit 2 (meta-framework with file-based routing)
 - Svelte 5 (reactive UI with runes - `$state`, `$derived`, `$effect`)
-- Pyodide 0.26.4 (Python 3.11 in WebAssembly)
-- Django 5.0.1 (running in browser via WSGI)
+- Pyodide 0.29.0 (Python 3.13 in WebAssembly)
+- Django 5.2 (running in browser via WSGI)
 - CodeMirror 6 (code editor)
 - Tailwind CSS v4 (styling)
 - Web Workers (isolated Python execution)
@@ -115,6 +115,15 @@ This codebase uses Svelte 5 (NOT Svelte 4). Key differences:
 - Use `$effect()` for side effects (NOT `$:` or `onMount` patterns)
 - Components use snippets (`{#snippet}`) for render props
 - Always check the Svelte 5 docs or existing components before adding Svelte code
+
+### Pyodide 0.29.0 API Changes
+
+**IMPORTANT**: Pyodide 0.29.0 changed the `toJs()` API behavior:
+
+- `toJs()` now returns JavaScript objects directly (NOT Maps)
+- Old: `result.toJs().get('key')` ❌
+- New: `result.get('key')?.toJs()` ✅ or access object properties directly
+- Python dicts automatically convert to JS objects (no `dict_converter` needed)
 
 ### Worker Communication
 

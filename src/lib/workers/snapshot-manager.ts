@@ -3,7 +3,7 @@ import { log } from './logger';
 const DB_NAME = 'pyodide-snapshots';
 const DB_VERSION = 1;
 const STORE_NAME = 'snapshots';
-const PYODIDE_VERSION = '0.26.4';
+const PYODIDE_VERSION = '0.29.0';
 
 interface SnapshotMetadata {
 	version: string;
@@ -102,9 +102,9 @@ tar_buffer = io.BytesIO()
 tar = tarfile.open(fileobj=tar_buffer, mode='w:gz')
 
 # Add site-packages directory with full path structure
-site_packages_path = '/lib/python3.12/site-packages'
+site_packages_path = '/lib/python3.13/site-packages'
 if os.path.exists(site_packages_path):
-    tar.add(site_packages_path, arcname='lib/python3.12/site-packages')
+    tar.add(site_packages_path, arcname='lib/python3.13/site-packages')
 
 tar.close()
 tar_buffer.seek(0)
@@ -213,7 +213,7 @@ tar.close()
 os.remove('/tmp/snapshot.tar.gz')
 
 # Ensure site-packages is in sys.path
-site_packages_path = '/lib/python3.12/site-packages'
+site_packages_path = '/lib/python3.13/site-packages'
 if site_packages_path not in sys.path:
     sys.path.insert(0, site_packages_path)
 
@@ -238,7 +238,7 @@ except ImportError:
 		`);
 
 		// Log debug info to browser console
-		const debugInfo = verifyResult.toJs({ dict_converter: Object.fromEntries });
+		const debugInfo = verifyResult.toJs();
 		const ageInMinutes = Math.round((Date.now() - snapshotData.metadata.timestamp) / 60000);
 		console.log(
 			`Snapshot restored (${ageInMinutes}m ago): Django ${debugInfo.django_found ? 'v' + debugInfo.django_version : 'NOT FOUND'}`

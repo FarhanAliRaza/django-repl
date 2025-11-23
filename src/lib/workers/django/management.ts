@@ -140,50 +140,8 @@ try:
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
         django.setup()
 
-    # Clear Python module cache so Django detects model changes
-    import gc
-    import importlib
-    from django.apps import apps
-
-    # Get app configs before clearing
-    custom_apps = [app for app in apps.get_app_configs() if not app.name.startswith('django.')]
-
-    # CRITICAL: Clear models from the global all_models registry
-    # NOTE: app_config.models is a PROPERTY that reads from all_models,
-    # so we should NOT set it directly - only clear all_models!
-    for app_config in custom_apps:
-        app_label = app_config.label
-
-        # Clear from apps.all_models global registry
-        if app_label in apps.all_models:
-            apps.all_models[app_label] = {}
-
-    # ONLY remove the models.py module, NOT the entire app package!
-    for app_config in custom_apps:
-        models_module_name = f"{app_config.name}.models"
-        if models_module_name in sys.modules:
-            del sys.modules[models_module_name]
-
-    # Force garbage collection
-    gc.collect()
-
-    # Invalidate import caches to ensure fresh file reads
-    importlib.invalidate_caches()
-
-    # Re-import models to trigger fresh registration
-    for app_config in custom_apps:
-        try:
-            models_module_name = f"{app_config.name}.models"
-
-            # Import and reload the models module
-            models_module = importlib.import_module(models_module_name)
-            importlib.reload(models_module)
-
-        except Exception as e:
-            print(f"Error reloading {app_config.name}: {e}")
-            import traceback
-            traceback.print_exc()
-
+    # Django's makemigrations command automatically reads model files from disk
+    # No need to manually reload modules - the files were already written to the virtual FS
     call_command('makemigrations', verbosity=2)
 
 except Exception as e:
