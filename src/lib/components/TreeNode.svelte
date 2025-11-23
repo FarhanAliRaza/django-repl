@@ -42,7 +42,7 @@
 			<span class="name">{node.name}</span>
 		</button>
 		{#if isExpanded && node.children}
-			{#each node.children as child}
+			{#each node.children.filter((child) => child.name !== '.gitkeep') as child}
 				<svelte:self
 					node={child}
 					depth={depth + 1}

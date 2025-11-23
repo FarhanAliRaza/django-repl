@@ -18,7 +18,13 @@
 	let newItemName = $state('');
 	let newItemParentPath = $state('');
 
+	// Track the last clicked folder for creating new files/folders
+	let lastClickedFolder = $state<string>('');
+
 	function toggleDir(path: string) {
+		// Track the clicked folder
+		lastClickedFolder = path;
+
 		if (expandedDirs.has(path)) {
 			expandedDirs.delete(path);
 		} else {
@@ -30,6 +36,10 @@
 
 	function selectFile(path: string) {
 		workspaceState.currentFile = path;
+
+		// Update lastClickedFolder to the parent directory of the selected file
+		const lastSlashIndex = path.lastIndexOf('/');
+		lastClickedFolder = lastSlashIndex > 0 ? path.substring(0, lastSlashIndex) : '';
 	}
 
 	function handleContextMenu(event: MouseEvent, node: FileNode) {
@@ -57,6 +67,11 @@
 	}
 
 	function getCurrentFileDirectory(): string {
+		// Prioritize the last clicked folder over the current file's directory
+		if (lastClickedFolder) {
+			return lastClickedFolder;
+		}
+
 		// Get the directory of the currently open file
 		const currentFile = workspaceState.currentFile;
 		if (!currentFile) return '';

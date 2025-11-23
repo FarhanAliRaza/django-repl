@@ -315,7 +315,29 @@ class WorkspaceState {
 			}
 		}
 
-		return tree;
+		// Sort function: directories first, then files, both alphabetically
+		const sortNodes = (nodes: FileNode[]): FileNode[] => {
+			return nodes.sort((a, b) => {
+				// Directories come before files
+				if (a.type === 'directory' && b.type === 'file') return -1;
+				if (a.type === 'file' && b.type === 'directory') return 1;
+				// Within same type, sort alphabetically by name
+				return a.name.localeCompare(b.name);
+			});
+		};
+
+		// Recursively sort all levels of the tree
+		const sortTreeRecursive = (nodes: FileNode[]): FileNode[] => {
+			const sorted = sortNodes(nodes);
+			for (const node of sorted) {
+				if (node.children) {
+					node.children = sortTreeRecursive(node.children);
+				}
+			}
+			return sorted;
+		};
+
+		return sortTreeRecursive(tree);
 	});
 
 	reset() {
