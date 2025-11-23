@@ -4,142 +4,159 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Django Playground is an experimental browser-based IDE that runs Django using Pyodide (Python in WebAssembly). It allows users to write Django code in the browser and see it execute client-side without any backend server.
+Django Playground is an experimental browser-based IDE that runs Django entirely in the browser using Pyodide (Python via WebAssembly). No backend server required - everything executes client-side in Web Workers.
 
-## Tech Stack
+**Tech Stack:**
 
-- **Frontend**: SvelteKit 2 + Svelte 5 (with runes)
-- **Python Runtime**: Pyodide v0.26.4 (WebAssembly)
-- **Code Editor**: CodeMirror 6
-- **Styling**: Tailwind CSS v4
-- **Testing**: Vitest (unit + browser tests) + Playwright (e2e)
-- **Build Tool**: Vite 7
-
-## Commands
-
-### Development
-```bash
-pnpm run dev          # Start dev server on localhost:5173
-pnpm run build        # Production build
-pnpm run preview      # Preview production build
-```
-
-### Testing
-```bash
-pnpm run test         # Run all tests (e2e + unit)
-pnpm run test:unit    # Unit tests only (runs with vitest)
-pnpm run test:e2e     # E2E tests only (runs with Playwright)
-```
-
-### Code Quality
-```bash
-pnpm run lint         # Check code formatting with Prettier + ESLint
-pnpm run format       # Format code with Prettier
-pnpm run check        # TypeScript + Svelte type checking
-pnpm run check:watch  # Type checking in watch mode
-```
+- SvelteKit 2 (meta-framework with file-based routing)
+- Svelte 5 (reactive UI with runes - `$state`, `$derived`, `$effect`)
+- Pyodide 0.26.4 (Python 3.11 in WebAssembly)
+- Django 5.0.1 (running in browser via WSGI)
+- CodeMirror 6 (code editor)
+- Tailwind CSS v4 (styling)
+- Web Workers (isolated Python execution)
 
 ## Architecture
 
-### Core Components
+### Core Execution Flow
 
-1. **Web Worker Architecture** (`src/lib/workers/`)
-   - `python-executor.ts` - Main worker entry point, message handler routing
-   - `pyodide-manager.ts` - Manages Pyodide initialization and package installation
-   - `django/executor.ts` - Executes Django views via WSGI handler
-   - `django/management.ts` - Django management commands (migrate, makemigrations, createsuperuser)
-   - `filesystem.ts` - Virtual filesystem operations for Pyodide
-   - `static-file-processor.ts` - Inlines static files into HTML responses
-   - `handlers/message-handlers.ts` - Worker message type handlers
+1. **Main Thread (SvelteKit):** UI components, state management via Svelte 5 runes
+2. **Web Worker Pool:** Each worker runs independent Pyodide instance executing Django
+3. **Virtual Filesystem:** Files stored in Pyodide's in-memory FS, synced from workspace state
+4. **WSGI Handler:** Python code executes Django views via WSGI protocol
+5. **Output Rendering:** HTML/JSON returned to main thread, rendered in sandboxed iframe
 
-2. **State Management** (`src/lib/stores/`)
-   - `workspace.ts` - File management store with default Django project template
-   - `execution.svelte.ts` - Execution state using Svelte 5 runes
-   - `path-state.svelte.ts` - Navigation/path state management
+### Key State Management Pattern (Svelte 5 Runes)
 
-3. **UI Components** (`src/lib/components/`)
-   - `Editor.svelte` - CodeMirror-based Python editor
-   - `Output.svelte` - Preview iframe with sandboxed Django output
-   - `FileTree.svelte` - File explorer tree view
-   - `Console.svelte` - Log output display
-   - `AddressBar.svelte` - URL navigation bar
-   - `ui/` - Shared UI components (buttons, resizable panes)
+All stores use Svelte 5's new runes system (`$state`, `$derived`), NOT the old `writable()` pattern:
 
-### Communication Flow
+- **`workspaceState`** (`src/lib/stores/workspace.svelte.ts`): File tree, current file, Django project files
+- **`executionState`** (`src/lib/stores/execution.svelte.ts`): REPL state, execution results, logs, cookies
+- **`pathState`** (`src/lib/stores/path-state.svelte.ts`): Browser path for Django URL routing
 
-```
-User Action ’ Svelte Component ’ Worker Message ’ Pyodide Execution ’ Worker Response ’ UI Update
-```
+**CRITICAL:** When extracting data for Web Workers, use `$state.snapshot()` to remove Svelte proxies (see `workspaceState.getFiles()`). Workers cannot receive proxy objects.
 
-1. User edits code in CodeMirror editor
-2. Files stored in `workspaceFiles` store
-3. On execution, files sent to Web Worker via `WorkerRequest`
-4. Worker writes files to Pyodide's virtual FS
-5. Django WSGI handler executed with HTTP request simulation
-6. HTML response returned via `WorkerResponse`
-7. Output rendered in sandboxed iframe
+### Worker Communication Architecture
 
-### Key Technical Details
-
-- **Django Execution**: Uses `StaticFilesHandler(WSGIHandler())` to simulate Django dev server
-- **Module Cache**: Clears Python module cache on file writes to reload changed modules
-- **Cookie/Session Management**: Simulates browser cookies by passing them through WSGI environ
-- **Static Files**: Inlined into HTML using base64 encoding for CSS/JS/images
-- **Migrations**: Auto-runs migrations and creates superuser (admin/admin) on first init
-- **Virtual FS**: All Django project files stored in Pyodide's emscripten filesystem
-
-### Worker Message Types
+**Main Thread ï¿½ Worker Messages:**
 
 ```typescript
-// Request types
-'init'              // Initialize Pyodide + install Django
-'execute'           // Execute Django view with optional HTTP params
-'writeFiles'        // Write files to virtual FS
-'runMigrations'     // Run Django migrations
-'makeMigrations'    // Create new migrations
-'createSuperuser'   // Create Django superuser
-'installPackage'    // Install Python package via micropip
+// Request types: 'init', 'execute', 'writeFiles', 'runMigrations', 'makeMigrations', 'createSuperuser'
+// Response types: 'ready', 'result', 'error', 'log', 'database'
 
-// Response types
-'ready'             // Pyodide initialized
-'result'            // Execution result with HTML/logs
-'error'             // Error occurred
-'log'               // Log message
+// Files are sent with every 'execute' request
+// Workers maintain Django state in-memory between executions
 ```
 
-### Default Django Project Structure
+**Worker Pool Pattern:**
 
-Located in `src/lib/stores/workspace.ts`:
-- `myproject/` - Django project config (settings, urls, wsgi)
-- `myapp/` - Django app with views, models, urls
-- `templates/` - Django templates
-- `manage.py` - Django management script
+- Workers are created lazily and reused
+- Each worker maintains its own Django instance
+- Snapshot/restore mechanism caches Pyodide+Django for faster worker initialization
 
-### Testing Setup
+### File Structure
 
-Two test configurations in `vite.config.ts`:
-1. **Client tests** - Browser-based tests for Svelte components (`.svelte.test.ts`)
-2. **Server tests** - Node-based tests for utilities (`.test.ts`)
+```
+src/
+ routes/                      # SvelteKit pages (+page.svelte, +layout.svelte)
+ lib/
+    components/             # Svelte 5 components
+       Editor.svelte      # CodeMirror editor
+       Output.svelte      # Django output iframe
+       FileTree.svelte    # File explorer
+       Console.svelte     # Logs display
+       ui/                # shadcn-svelte UI components
+    stores/                # Svelte 5 rune-based stores
+       workspace.svelte.ts
+       execution.svelte.ts
+       path-state.svelte.ts
+    workers/               # Web Worker code (Python executor)
+       python-executor.ts       # Entry point
+       pyodide-manager.ts      # Pyodide initialization
+       snapshot-manager.ts     # IndexedDB snapshot caching
+       filesystem.ts           # Virtual FS operations
+       handlers/
+          message-handlers.ts # Worker message routing
+       django/
+           executor.ts         # Django WSGI execution
+           management.ts       # Django management commands
+    types/                 # TypeScript types
+    utils/                 # Utility functions
+```
 
-## Important Patterns
+## Development Commands
 
-### File Operations
-- Always use the `workspaceFiles` store for file state management
-- Files are key-value pairs: `Record<string, string>` where key is filepath
-- Use `updateFile()`, `addFile()`, `deleteFile()` store methods
+```bash
+# Development
+pnpm run dev          # Start dev server (Vite)
+pnpm run build        # Production build
+pnpm run preview      # Preview production build
+
+# Testing
+pnpm run test         # Run all tests (E2E + unit)
+pnpm run test:unit    # Unit tests (Vitest browser mode)
+pnpm run test:e2e     # E2E tests (Playwright)
+
+# Code Quality
+pnpm run lint         # Check formatting (Prettier + ESLint)
+pnpm run format       # Auto-format code
+pnpm run check        # Type-check with svelte-check
+pnpm run check:watch  # Type-check in watch mode
+```
+
+## Important Patterns & Gotchas
+
+### Svelte 5 Runes
+
+This codebase uses Svelte 5 (NOT Svelte 4). Key differences:
+
+- Use `$state()` instead of `let` for reactive variables
+- Use `$derived()` for computed values (NOT `$:`)
+- Use `$effect()` for side effects (NOT `$:` or `onMount` patterns)
+- Components use snippets (`{#snippet}`) for render props
+- Always check the Svelte 5 docs or existing components before adding Svelte code
 
 ### Worker Communication
-- All worker interactions are message-based and asynchronous
-- Always handle both success and error response types
-- Worker maintains its own Pyodide instance - cannot be accessed directly
+
+- **Never bypass file syncing:** Always send full file tree with 'execute' requests
+- **Use skipFileWrite flag:** When navigating between pages, set `skipFileWrite: true` to avoid re-writing unchanged files
+- **Cookie persistence:** Execution state manages session cookies via `CookieStorage` (localStorage-backed)
 
 ### Django-Specific
-- Database: SQLite3 in-memory via Pyodide's FS
-- Settings module: `myproject.settings`
-- Password hasher: MD5 (fast for WebAssembly, not for production)
-- Async mode: `DJANGO_ALLOW_ASYNC_UNSAFE=true` for synchronous ORM
 
-### SvelteKit Considerations
-- Uses Svelte 5 runes (`$state`, `$derived`, `$effect`) for reactivity
-- No server-side rendering for main IDE page (runs entirely client-side)
-- Web Worker cannot import SvelteKit modules (must be vanilla TS)
+- **Virtual FS paths:** Database at `/db.sqlite3`, project files at `/home/pyodide/`
+- **Management commands:** migrations, superuser creation all go through workers
+- **Static files:** Special handling via `static-file-processor.ts` (not fully tested)
+- **Admin panel:** Works with proper migrations and superuser setup
+
+### Testing Strategy
+
+- **Unit tests:** Browser-based Vitest with Playwright (for Svelte components)
+- **E2E tests:** Playwright (for full workflows)
+- Test config splits client/server tests via Vitest projects (see vite.config.ts)
+
+## Critical Development Rules
+
+1. **Never commit code** - Auto-commits disabled per user preferences
+2. **Import style:** Always use full imports at top level (`from x import y`, NOT `import x; x.y`)
+3. **Exceptions:** Always descriptive, never silent `pass` without logging
+4. **API efficiency:** Use single endpoints, don't load full data to filter client-side
+5. **Fix at source:** Never add workarounds, fix the root cause
+6. **shadcn-ui:** Read original component in `src/lib/components/ui/` for correct usage
+7. **Svelte** Use `$effect` as last resort not default choice. Use `onMount` for loading on mount not `$effect` if we only want to load data.
+
+## Performance Optimizations
+
+- **Snapshot system:** First worker creates IndexedDB snapshot of Pyodide+Django
+- **Subsequent workers:** Restore from snapshot (~2s vs ~10s cold start)
+- **Pre-import Django modules:** Warm up `sys.modules` cache after install
+- **Worker pool:** Reuse workers instead of recreating
+
+## Known Limitations (Experimental)
+
+- Database migrations: Basic support, advanced migrations untested
+- ORM complex queries: May have edge cases
+- Static files: Not fully implemented
+- Admin interface: Requires migrations + superuser (tested and works)
+- Forms/validation: Untested
+- Authentication: Cookie-based sessions work, full auth system untested
