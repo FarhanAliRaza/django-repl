@@ -94,14 +94,19 @@ export async function executeDjangoView(
 	}
 
 	try {
+		const overallStartTime = performance.now();
+
 		// Always write files on first execution of this worker, even if skipFileWrite is true
 		if (!skipFileWrite || !filesWritten) {
+			const fileWriteStartTime = performance.now();
 			log('Setting up Django environment...', 'info');
 			log(`Received ${Object.keys(files).length} files to execute`, 'info');
 
 			// Write files to virtual FS
 			await writeFilesToVirtualFS(files);
 			filesWritten = true;
+			const fileWriteDuration = performance.now() - fileWriteStartTime;
+			log(`File write completed in ${fileWriteDuration.toFixed(2)}ms`, 'info', 'worker');
 		} else {
 			// Navigation only - just log the path change
 			log(`Navigating to ${viewPath}`, 'info');
@@ -109,6 +114,7 @@ export async function executeDjangoView(
 
 		log('Executing Django WSGI handler...', 'info');
 		const startExec = Date.now();
+		const pythonExecStartTime = performance.now();
 
 		// Serialize body to string
 		const bodyStr =
@@ -136,6 +142,7 @@ export async function executeDjangoView(
 import sys
 import os
 from io import StringIO, BytesIO
+import time
 
 # Capture stdout and stderr
 old_stdout = sys.stdout
@@ -149,27 +156,37 @@ output = {
     'error': None,
     'html': None,
     'status': None,
-    'headers': []
+    'headers': [],
+    'timings': {}
 }
 
 try:
+    overall_start = time.perf_counter()
+
     # Import Django
+    import_start = time.perf_counter()
     import django
     from django.conf import settings
     from django.core.handlers.wsgi import WSGIHandler
     from django.contrib.staticfiles.handlers import StaticFilesHandler
     import os
+    import_duration = (time.perf_counter() - import_start) * 1000
+    output['timings']['imports'] = f"{import_duration:.2f}ms"
 
     # Force synchronous mode for Django ORM operations
     os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
 
     # Configure Django settings if not already configured
+    setup_start = time.perf_counter()
     if not settings.configured:
         # Use the actual settings file from the project
         os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
         django.setup()
+    setup_duration = (time.perf_counter() - setup_start) * 1000
+    output['timings']['django_setup'] = f"{setup_duration:.2f}ms"
 
     # Create WSGI environ
+    environ_start = time.perf_counter()
     environ = {
         'REQUEST_METHOD': '${method}',
         'PATH_INFO': '${pathOnly}',
@@ -189,10 +206,15 @@ try:
         'wsgi.run_once': False,
         ${cookieHeader ? `'HTTP_COOKIE': '${cookieHeader.replace(/'/g, "\\'")}',` : ''}
     }
+    environ_duration = (time.perf_counter() - environ_start) * 1000
+    output['timings']['environ_creation'] = f"{environ_duration:.2f}ms"
 
     # Execute WSGI handler with static files support
     # StaticFilesHandler wraps WSGIHandler to serve static files in development
+    handler_start = time.perf_counter()
     handler = StaticFilesHandler(WSGIHandler())
+    handler_duration = (time.perf_counter() - handler_start) * 1000
+    output['timings']['handler_creation'] = f"{handler_duration:.2f}ms"
 
     response_data = {
         'status': None,
@@ -214,6 +236,7 @@ try:
         response_data['headers'] = headers
         return lambda data: response_data['body'].append(data)
 
+    exec_start = time.perf_counter()
     result = handler(environ, start_response)
     try:
         for chunk in result:
@@ -222,12 +245,20 @@ try:
     finally:
         if hasattr(result, 'close'):
             result.close()
+    exec_duration = (time.perf_counter() - exec_start) * 1000
+    output['timings']['handler_execution'] = f"{exec_duration:.2f}ms"
 
     # Get the HTML
+    response_start = time.perf_counter()
     html_bytes = b''.join(response_data['body'])
     output['html'] = html_bytes.decode('utf-8')
     output['status'] = response_data['status']
     output['headers'] = response_data['headers']
+    response_duration = (time.perf_counter() - response_start) * 1000
+    output['timings']['response_processing'] = f"{response_duration:.2f}ms"
+
+    total_duration = (time.perf_counter() - overall_start) * 1000
+    output['timings']['total_python'] = f"{total_duration:.2f}ms"
 
 except Exception as e:
     import traceback
@@ -243,12 +274,24 @@ finally:
 output
 		`);
 
+		const pythonExecDuration = performance.now() - pythonExecStartTime;
+
 		const stdout = result.get('stdout') || '';
 		const stderr = result.get('stderr') || '';
 		const error = result.get('error');
 		const html = result.get('html');
 		const status = result.get('status');
 		const pyHeaders = result.toJs().get('headers') || [];
+		const timings = result.toJs().get('timings') || {};
+
+		// Log Python execution timings
+		if (Object.keys(timings).length > 0) {
+			log(`Python execution breakdown:`, 'info', 'worker');
+			for (const [key, value] of Object.entries(timings)) {
+				log(`  - ${key}: ${value}`, 'info', 'worker');
+			}
+		}
+		log(`Total runPythonAsync call: ${pythonExecDuration.toFixed(2)}ms`, 'info', 'worker');
 
 		// Extract Set-Cookie headers, Location header (for redirects), and Content-Type
 		const cookiesToSet: Array<{ name: string; value: string }> = [];
@@ -290,6 +333,8 @@ output
 
 		// If this is a static file request, return it with appropriate metadata
 		if (isStaticFileRequest) {
+			const overallDuration = performance.now() - overallStartTime;
+			log(`Total executeDjangoView time: ${overallDuration.toFixed(2)}ms`, 'info', 'worker');
 			return {
 				success: true,
 				output: html || '', // For static files, content is in html
@@ -303,8 +348,14 @@ output
 		// Process HTML to inline static files before returning
 		let processedHtml = html;
 		if (html && responseContentType?.includes('text/html')) {
+			const staticProcessStartTime = performance.now();
 			processedHtml = await inlineStaticFiles(html);
+			const staticProcessDuration = performance.now() - staticProcessStartTime;
+			log(`Static file inlining: ${staticProcessDuration.toFixed(2)}ms`, 'info', 'worker');
 		}
+
+		const overallDuration = performance.now() - overallStartTime;
+		log(`Total executeDjangoView time: ${overallDuration.toFixed(2)}ms`, 'info', 'worker');
 
 		return {
 			success: true,

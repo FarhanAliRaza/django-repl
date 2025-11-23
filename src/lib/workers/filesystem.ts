@@ -2,6 +2,7 @@ import { log } from './logger';
 import { getPyodide } from './pyodide-manager';
 
 export async function writeFilesToVirtualFS(files: Record<string, string>) {
+	const startTime = performance.now();
 	const pyodide = getPyodide();
 	if (!pyodide) {
 		log('Pyodide not initialized', 'error', 'worker');
@@ -9,8 +10,11 @@ export async function writeFilesToVirtualFS(files: Record<string, string>) {
 	}
 
 	try {
-		log(`Writing ${Object.keys(files).length} files to virtual filesystem...`, 'info', 'worker');
+		const fileCount = Object.keys(files).length;
+		const totalSize = Object.values(files).reduce((sum, content) => sum + content.length, 0);
+		log(`Writing ${fileCount} files (${(totalSize / 1024).toFixed(2)} KB) to virtual filesystem...`, 'info', 'worker');
 
+		const dirCreateStartTime = performance.now();
 		for (const [filepath, content] of Object.entries(files)) {
 			// Create directory structure if needed
 			const parts = filepath.split('/');
@@ -28,11 +32,14 @@ export async function writeFilesToVirtualFS(files: Record<string, string>) {
 			// Write the file
 			pyodide.FS.writeFile(filepath, content);
 		}
+		const dirCreateDuration = performance.now() - dirCreateStartTime;
 
-		log('Files written successfully', 'success', 'worker');
+		const totalDuration = performance.now() - startTime;
+		log(`Files written successfully in ${totalDuration.toFixed(2)}ms (dir creation: ${dirCreateDuration.toFixed(2)}ms)`, 'success', 'worker');
 		return true;
 	} catch (error) {
-		log(`Failed to write files: ${error}`, 'error', 'worker');
+		const totalDuration = performance.now() - startTime;
+		log(`Failed to write files after ${totalDuration.toFixed(2)}ms: ${error}`, 'error', 'worker');
 		return false;
 	}
 }

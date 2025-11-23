@@ -66,12 +66,27 @@ export async function installDjango() {
 			log('Loading tzdata...', 'info', 'django');
 			await pyodide.loadPackage('tzdata');
 
+			// Pre-import Django modules to warm up sys.modules cache
+			log('Pre-importing Django modules...', 'info', 'django');
+			const preImportStart = performance.now();
+			await pyodide.runPythonAsync(`
+import os
+import django
+from django.conf import settings
+from django.core.handlers.wsgi import WSGIHandler
+from django.contrib.staticfiles.handlers import StaticFilesHandler
+
+# Set Django environment variables (but don't call django.setup() yet)
+os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
+			`);
+			const preImportDuration = performance.now() - preImportStart;
+			log(`Django modules pre-imported in ${preImportDuration.toFixed(2)}ms`, 'success', 'django');
+
 			djangoInstalled = true;
 			log('Django installed successfully', 'success', 'django');
 
-			// Create snapshot for future workers (blocking to ensure it's ready for next worker)
-			console.log('[pyodide-manager] Creating snapshot for faster reloads...');
-			await createSnapshot(pyodide, DJANGO_VERSION);
+			// Note: Snapshot creation will be triggered by message-handlers after 'ready' is sent
+			// This prevents blocking the worker from becoming ready
 
 			return true;
 		}
@@ -91,6 +106,23 @@ export async function installDjango() {
 
 				log('Loading tzdata...', 'info', 'django');
 				await pyodide.loadPackage('tzdata');
+
+				// Pre-import Django modules to warm up sys.modules cache
+				// This makes the first view execution much faster
+				log('Pre-importing Django modules...', 'info', 'django');
+				const preImportStart = performance.now();
+				await pyodide.runPythonAsync(`
+import os
+import django
+from django.conf import settings
+from django.core.handlers.wsgi import WSGIHandler
+from django.contrib.staticfiles.handlers import StaticFilesHandler
+
+# Set Django environment variables (but don't call django.setup() yet)
+os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
+				`);
+				const preImportDuration = performance.now() - preImportStart;
+				log(`Django modules pre-imported in ${preImportDuration.toFixed(2)}ms`, 'success', 'django');
 
 				djangoInstalled = true;
 				log('Django restored successfully', 'success', 'django');
@@ -114,6 +146,22 @@ export async function installDjango() {
 		// Load tzdata package for timezone support
 		log('Loading tzdata...', 'info', 'django');
 		await pyodide.loadPackage('tzdata');
+
+		// Pre-import Django modules to warm up sys.modules cache
+		log('Pre-importing Django modules...', 'info', 'django');
+		const preImportStart = performance.now();
+		await pyodide.runPythonAsync(`
+import os
+import django
+from django.conf import settings
+from django.core.handlers.wsgi import WSGIHandler
+from django.contrib.staticfiles.handlers import StaticFilesHandler
+
+# Set Django environment variables (but don't call django.setup() yet)
+os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
+		`);
+		const preImportDuration = performance.now() - preImportStart;
+		log(`Django modules pre-imported in ${preImportDuration.toFixed(2)}ms`, 'success', 'django');
 
 		djangoInstalled = true;
 		log('Django installed successfully', 'success', 'django');
@@ -148,4 +196,22 @@ export function getPyodide() {
 
 export function isPyodideReady() {
 	return pyodide !== null;
+}
+
+/**
+ * Create a snapshot of the current Pyodide state
+ * This should be called after the worker is ready to avoid blocking initialization
+ */
+export async function createPyodideSnapshot(): Promise<void> {
+	if (!pyodide) {
+		console.warn('[pyodide-manager] Cannot create snapshot: Pyodide not initialized');
+		return;
+	}
+
+	console.log('[pyodide-manager] Creating snapshot for faster reloads...');
+	try {
+		await createSnapshot(pyodide, DJANGO_VERSION);
+	} catch (error) {
+		console.error('[pyodide-manager] Failed to create snapshot:', error);
+	}
 }

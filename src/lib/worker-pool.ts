@@ -169,6 +169,8 @@ export class WorkerPool {
 		onMessage: (response: WorkerResponse) => void,
 		onLog?: (message: string) => void
 	): Promise<string | null> {
+		const swapStartTime = performance.now();
+
 		const readyWorker = this.getReadyWorker();
 		if (!readyWorker) {
 			onLog?.('No ready workers available in pool');
@@ -184,22 +186,34 @@ export class WorkerPool {
 			if (currentWorkerId) {
 				const currentWorker = this.workers.get(currentWorkerId);
 				if (currentWorker) {
+					const dbStartTime = performance.now();
 					onLog?.(`Getting database from ${currentWorkerId}...`);
 					dbData = await this.getDatabaseFromWorker(currentWorker);
+					const dbDuration = performance.now() - dbStartTime;
+					onLog?.(`✓ Got database in ${dbDuration.toFixed(2)}ms (${dbData ? dbData.length : 0} bytes)`);
 				}
 			}
 
 			// Transfer files to the new worker
-			onLog?.(`Transferring files to ${readyWorker.id}...`);
+			const filesStartTime = performance.now();
+			const fileCount = Object.keys(files).length;
+			const totalFileSize = Object.values(files).reduce((sum, content) => sum + content.length, 0);
+			onLog?.(`Transferring ${fileCount} files (${(totalFileSize / 1024).toFixed(2)} KB) to ${readyWorker.id}...`);
 			await this.writeFilesToWorker(readyWorker, files);
+			const filesDuration = performance.now() - filesStartTime;
+			onLog?.(`✓ Transferred files in ${filesDuration.toFixed(2)}ms`);
 
 			// Transfer database if we have one
 			if (dbData) {
+				const dbTransferStartTime = performance.now();
 				onLog?.(`Transferring database to ${readyWorker.id}...`);
 				await this.setDatabaseToWorker(readyWorker, dbData);
+				const dbTransferDuration = performance.now() - dbTransferStartTime;
+				onLog?.(`✓ Transferred database in ${dbTransferDuration.toFixed(2)}ms`);
 			}
 
 			// Terminate old worker (it has stale state) and create a fresh one
+			const terminateStartTime = performance.now();
 			if (currentWorkerId) {
 				const oldWorker = this.workers.get(currentWorkerId);
 				if (oldWorker) {
@@ -214,11 +228,13 @@ export class WorkerPool {
 					// Return the worker ID to available pool for reuse
 					const workerId = parseInt(currentWorkerId.replace('worker-', ''));
 					this.availableIds.add(workerId);
-					onLog?.(`Terminated ${currentWorkerId} (stale state)`);
+					const terminateDuration = performance.now() - terminateStartTime;
+					onLog?.(`✓ Terminated ${currentWorkerId} in ${terminateDuration.toFixed(2)}ms`);
 				}
 			}
 
 			// Set up message handler for the new active worker
+			const setupStartTime = performance.now();
 			readyWorker.messageHandler = onMessage;
 			const eventListener = (event: MessageEvent<WorkerResponse>) => {
 				if (readyWorker.messageHandler) {
@@ -229,7 +245,11 @@ export class WorkerPool {
 			readyWorker.worker.addEventListener('message', eventListener);
 
 			readyWorker.state = 'ready';
-			onLog?.(`Successfully swapped to worker ${readyWorker.id}`);
+			const setupDuration = performance.now() - setupStartTime;
+
+			const totalDuration = performance.now() - swapStartTime;
+			onLog?.(`✓ Setup complete in ${setupDuration.toFixed(2)}ms`);
+			onLog?.(`✅ Successfully swapped to worker ${readyWorker.id} - Total time: ${totalDuration.toFixed(2)}ms`);
 
 			// Create a fresh worker to replace the terminated one
 			onLog?.(`Creating fresh worker to replace terminated ${currentWorkerId}...`);
@@ -239,7 +259,8 @@ export class WorkerPool {
 
 			return readyWorker.id;
 		} catch (error) {
-			onLog?.(`Failed to swap to fresh worker: ${error}`);
+			const totalDuration = performance.now() - swapStartTime;
+			onLog?.(`❌ Failed to swap to fresh worker after ${totalDuration.toFixed(2)}ms: ${error}`);
 			readyWorker.state = 'ready'; // Reset state on failure
 			return null;
 		}
@@ -249,6 +270,8 @@ export class WorkerPool {
 	 * Get database data from a worker
 	 */
 	private async getDatabaseFromWorker(worker: PooledWorker): Promise<Uint8Array | null> {
+		const startTime = performance.now();
+
 		return new Promise((resolve) => {
 			const timeout = setTimeout(() => {
 				console.warn(`[WorkerPool] Timeout getting database from ${worker.id}`);
@@ -261,16 +284,18 @@ export class WorkerPool {
 					clearTimeout(timeout);
 					worker.worker.removeEventListener('message', messageHandler);
 					const payload = response.payload as { dbData: Uint8Array };
+					const duration = performance.now() - startTime;
 					if (payload.dbData) {
-						console.log(`[WorkerPool] Got database from ${worker.id}: ${payload.dbData.length} bytes`);
+						console.log(`[WorkerPool] Got database from ${worker.id}: ${payload.dbData.length} bytes in ${duration.toFixed(2)}ms`);
 					} else {
-						console.log(`[WorkerPool] No database data from ${worker.id}`);
+						console.log(`[WorkerPool] No database data from ${worker.id} (${duration.toFixed(2)}ms)`);
 					}
 					resolve(payload.dbData);
 				} else if (response.type === 'error') {
 					clearTimeout(timeout);
 					worker.worker.removeEventListener('message', messageHandler);
-					console.error(`[WorkerPool] Error getting database from ${worker.id}`);
+					const duration = performance.now() - startTime;
+					console.error(`[WorkerPool] Error getting database from ${worker.id} after ${duration.toFixed(2)}ms`);
 					resolve(null);
 				}
 			};
@@ -292,8 +317,14 @@ export class WorkerPool {
 		worker: PooledWorker,
 		files: Record<string, string>
 	): Promise<boolean> {
+		const startTime = performance.now();
+		const fileCount = Object.keys(files).length;
+		const totalSize = Object.values(files).reduce((sum, content) => sum + content.length, 0);
+
 		return new Promise((resolve) => {
 			const timeout = setTimeout(() => {
+				const duration = performance.now() - startTime;
+				console.warn(`[WorkerPool] Timeout writing ${fileCount} files to ${worker.id} after ${duration.toFixed(2)}ms`);
 				resolve(false);
 			}, 30000); // 30 second timeout
 
@@ -303,22 +334,29 @@ export class WorkerPool {
 					clearTimeout(timeout);
 					worker.worker.removeEventListener('message', messageHandler);
 					const payload = response.payload as { success: boolean };
+					const duration = performance.now() - startTime;
+					console.log(`[WorkerPool] Wrote ${fileCount} files (${(totalSize / 1024).toFixed(2)} KB) to ${worker.id} in ${duration.toFixed(2)}ms - Success: ${payload.success}`);
 					resolve(payload.success);
 				} else if (response.type === 'error') {
 					clearTimeout(timeout);
 					worker.worker.removeEventListener('message', messageHandler);
+					const duration = performance.now() - startTime;
+					console.error(`[WorkerPool] Error writing files to ${worker.id} after ${duration.toFixed(2)}ms`);
 					resolve(false);
 				}
 			};
 
 			worker.worker.addEventListener('message', messageHandler);
 
+			const postMessageStartTime = performance.now();
 			const request: WorkerRequest = {
 				type: 'writeFiles',
 				payload: { files }
 			};
 
 			worker.worker.postMessage(request);
+			const postMessageDuration = performance.now() - postMessageStartTime;
+			console.log(`[WorkerPool] postMessage for writeFiles took ${postMessageDuration.toFixed(2)}ms (${fileCount} files, ${(totalSize / 1024).toFixed(2)} KB)`);
 		});
 	}
 
@@ -329,11 +367,14 @@ export class WorkerPool {
 		worker: PooledWorker,
 		dbData: Uint8Array
 	): Promise<boolean> {
+		const startTime = performance.now();
+
 		return new Promise((resolve) => {
 			console.log(`[WorkerPool] Setting database to ${worker.id}: ${dbData.length} bytes`);
 
 			const timeout = setTimeout(() => {
-				console.warn(`[WorkerPool] Timeout setting database to ${worker.id}`);
+				const duration = performance.now() - startTime;
+				console.warn(`[WorkerPool] Timeout setting database to ${worker.id} after ${duration.toFixed(2)}ms`);
 				resolve(false);
 			}, 10000); // 10 second timeout
 
@@ -343,24 +384,29 @@ export class WorkerPool {
 					clearTimeout(timeout);
 					worker.worker.removeEventListener('message', messageHandler);
 					const payload = response.payload as { success: boolean };
-					console.log(`[WorkerPool] Database set to ${worker.id}: ${payload.success ? 'success' : 'failed'}`);
+					const duration = performance.now() - startTime;
+					console.log(`[WorkerPool] Database set to ${worker.id} in ${duration.toFixed(2)}ms: ${payload.success ? 'success' : 'failed'}`);
 					resolve(payload.success);
 				} else if (response.type === 'error') {
 					clearTimeout(timeout);
 					worker.worker.removeEventListener('message', messageHandler);
-					console.error(`[WorkerPool] Error setting database to ${worker.id}`);
+					const duration = performance.now() - startTime;
+					console.error(`[WorkerPool] Error setting database to ${worker.id} after ${duration.toFixed(2)}ms`);
 					resolve(false);
 				}
 			};
 
 			worker.worker.addEventListener('message', messageHandler);
 
+			const postMessageStartTime = performance.now();
 			const request: WorkerRequest = {
 				type: 'setDatabase',
 				payload: { dbData }
 			};
 
 			worker.worker.postMessage(request);
+			const postMessageDuration = performance.now() - postMessageStartTime;
+			console.log(`[WorkerPool] postMessage for setDatabase took ${postMessageDuration.toFixed(2)}ms (${dbData.length} bytes)`);
 		});
 	}
 

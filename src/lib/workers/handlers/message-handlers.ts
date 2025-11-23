@@ -1,5 +1,5 @@
 import type { WorkerRequest, WorkerResponse } from '$lib/types';
-import { initializePyodide, installDjango, installPackage, setFirstLoad } from '../pyodide-manager';
+import { initializePyodide, installDjango, installPackage, setFirstLoad, createPyodideSnapshot } from '../pyodide-manager';
 import { executePython, executeDjangoView } from '../django/executor';
 import { runMigrations, makeMigrations, createSuperuser } from '../django/management';
 import {
@@ -11,6 +11,7 @@ import { log, getLogs } from '../logger';
 
 export async function handleInit(isFirstLoad?: boolean): Promise<WorkerResponse> {
 	// Set the first load flag if provided
+	const isFirst = isFirstLoad === true;
 	if (isFirstLoad !== undefined) {
 		setFirstLoad(isFirstLoad);
 	}
@@ -18,6 +19,16 @@ export async function handleInit(isFirstLoad?: boolean): Promise<WorkerResponse>
 	const success = await initializePyodide();
 	if (success) {
 		await installDjango();
+
+		// For first load, create snapshot in background AFTER sending ready message
+		// This prevents blocking the worker from becoming ready
+		if (isFirst) {
+			// Fire-and-forget snapshot creation (non-blocking)
+			createPyodideSnapshot().catch((error) => {
+				console.error('[message-handlers] Snapshot creation failed:', error);
+			});
+		}
+
 		return {
 			type: 'ready',
 			payload: { success: true }
