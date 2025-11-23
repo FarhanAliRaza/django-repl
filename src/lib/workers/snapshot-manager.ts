@@ -202,7 +202,6 @@ export async function restoreSnapshot(
 import tarfile
 import os
 import sys
-import importlib
 
 # Extract the archive
 tar = tarfile.open('/tmp/snapshot.tar.gz', mode='r:gz')
@@ -216,9 +215,6 @@ os.remove('/tmp/snapshot.tar.gz')
 site_packages_path = '/lib/python3.13/site-packages'
 if site_packages_path not in sys.path:
     sys.path.insert(0, site_packages_path)
-
-# Invalidate import caches
-importlib.invalidate_caches()
 
 # Verify Django
 django_found = False
