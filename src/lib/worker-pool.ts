@@ -15,9 +15,11 @@ export class WorkerPool {
 	private poolSize: number;
 	private nextId = 0;
 	private isFirstLoad = true;
-	private availableIds: Set<number> = new Set([0, 1]); // Track available worker IDs for reuse
+	private availableIds: Set<number> = new Set([0, 1, 2]); // Track available worker IDs for reuse
+	private swapInProgress: boolean = false; // Prevent concurrent swaps
+	public onWorkerReady?: () => void; // Callback when a worker becomes ready
 
-	constructor(poolSize = 2) {
+	constructor(poolSize = 3) {
 		this.poolSize = poolSize;
 	}
 
@@ -147,6 +149,15 @@ export class WorkerPool {
 	}
 
 	/**
+	 * Notify subscribers that a worker is ready
+	 */
+	private notifyWorkerReady(): void {
+		if (this.onWorkerReady) {
+			this.onWorkerReady();
+		}
+	}
+
+	/**
 	 * Get an available worker from the pool
 	 * Returns null if no workers are ready
 	 */
@@ -169,10 +180,22 @@ export class WorkerPool {
 		onMessage: (response: WorkerResponse) => void,
 		onLog?: (message: string) => void
 	): Promise<string | null> {
+		// Prevent concurrent swaps
+		if (this.swapInProgress) {
+			console.log('[WorkerPool] Swap already in progress, rejecting concurrent swap request');
+			onLog?.('⏸️ Another worker swap in progress, please wait...');
+			return null;
+		}
+
+		this.swapInProgress = true;
+		console.log('[WorkerPool] Swap lock acquired');
+
 		const swapStartTime = performance.now();
 
 		const readyWorker = this.getReadyWorker();
 		if (!readyWorker) {
+			this.swapInProgress = false; // Release lock
+			console.log('[WorkerPool] Swap lock released (no ready worker)');
 			onLog?.('No ready workers available in pool');
 			return null;
 		}
@@ -251,9 +274,18 @@ export class WorkerPool {
 			onLog?.(`✓ Setup complete in ${setupDuration.toFixed(2)}ms`);
 			onLog?.(`✅ Successfully swapped to worker ${readyWorker.id} - Total time: ${totalDuration.toFixed(2)}ms`);
 
-			// Create a fresh worker to replace the terminated one
-			onLog?.(`Creating fresh worker to replace terminated ${currentWorkerId}...`);
-			this.createAndWarmWorker(onLog).catch((err) => {
+			// Release swap lock BEFORE starting background worker warming
+			this.swapInProgress = false;
+			console.log('[WorkerPool] Swap lock released (success)');
+
+			// Immediately start creating replacement worker (non-blocking)
+			// This worker will warm in parallel with the view execution
+			onLog?.(`Creating replacement worker in background...`);
+			this.createAndWarmWorker(onLog).then(() => {
+				// Notify that a new worker is ready
+				console.log('[WorkerPool] Replacement worker ready, notifying subscribers');
+				this.notifyWorkerReady();
+			}).catch((err) => {
 				onLog?.(`Failed to create replacement worker: ${err.message}`);
 			});
 
@@ -262,6 +294,11 @@ export class WorkerPool {
 			const totalDuration = performance.now() - swapStartTime;
 			onLog?.(`❌ Failed to swap to fresh worker after ${totalDuration.toFixed(2)}ms: ${error}`);
 			readyWorker.state = 'ready'; // Reset state on failure
+
+			// Release swap lock on error
+			this.swapInProgress = false;
+			console.log('[WorkerPool] Swap lock released (error)');
+
 			return null;
 		}
 	}
@@ -354,9 +391,24 @@ export class WorkerPool {
 				payload: { files }
 			};
 
-			worker.worker.postMessage(request);
-			const postMessageDuration = performance.now() - postMessageStartTime;
-			console.log(`[WorkerPool] postMessage for writeFiles took ${postMessageDuration.toFixed(2)}ms (${fileCount} files, ${(totalSize / 1024).toFixed(2)} KB)`);
+			// Add detailed logging
+			console.log('[WorkerPool] About to postMessage writeFiles');
+			console.log('[WorkerPool] Files object type:', typeof files);
+			console.log('[WorkerPool] Files is array?', Array.isArray(files));
+			console.log('[WorkerPool] Files keys:', Object.keys(files).slice(0, 3));
+			console.log('[WorkerPool] First file sample:', Object.entries(files)[0]);
+
+			try {
+				worker.worker.postMessage(request);
+				const postMessageDuration = performance.now() - postMessageStartTime;
+				console.log(`[WorkerPool] postMessage succeeded in ${postMessageDuration.toFixed(2)}ms (${fileCount} files, ${(totalSize / 1024).toFixed(2)} KB)`);
+			} catch (error) {
+				console.error('[WorkerPool] postMessage failed:', error);
+				console.error('[WorkerPool] Error name:', (error as Error).name);
+				console.error('[WorkerPool] Error message:', (error as Error).message);
+				console.error('[WorkerPool] Files object:', files);
+				throw error; // Re-throw to be caught by outer catch
+			}
 		});
 	}
 

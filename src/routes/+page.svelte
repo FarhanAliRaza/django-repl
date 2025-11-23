@@ -16,6 +16,8 @@
 
 	let workerPool: WorkerPool | null = null;
 	let currentWorkerId: string | null = $state(null);
+	let latestPendingRefresh: { files: Record<string, string>; path: string; timestamp: number } | null = $state(null);
+	let isExecutingRefresh: boolean = $state(false); // Prevent concurrent refresh executions
 
 	// Message handler for worker pool responses
 	function handleWorkerMessage(response: WorkerResponse) {
@@ -90,7 +92,7 @@
 		// Reset state when initializing
 		executionState.resetState();
 
-		workerPool = new WorkerPool(2); // Create pool with 2 workers
+		workerPool = new WorkerPool(3); // Create pool with 3 workers
 
 		await workerPool.initialize(
 			(message) => {
@@ -99,6 +101,26 @@
 			},
 			handleWorkerMessage // Pass the message handler so first worker can receive Django logs
 		);
+
+		// Set up callback for when new workers become ready
+		workerPool.onWorkerReady = () => {
+			console.log('[WorkerPool] Worker ready event fired');
+			if (latestPendingRefresh && !isExecutingRefresh) {
+				console.log('[WorkerPool] Executing pending refresh');
+				const pending = latestPendingRefresh;
+				latestPendingRefresh = null;
+
+				// Use $state.snapshot() to remove Svelte Proxy added by $state storage
+				// When files are stored in $state variable, Svelte wraps them in Proxies
+				// which cannot be cloned by postMessage()
+				console.log('[WorkerPool] Using $state.snapshot to remove Svelte Proxy wrapper');
+				const clonedFiles = $state.snapshot(pending.files);
+
+				executeRefresh(clonedFiles, pending.path);
+			} else if (isExecutingRefresh) {
+				console.log('[WorkerPool] Skipping pending refresh - execution already in progress');
+			}
+		};
 
 		// Get the first ready worker
 		const readyWorker = workerPool.getReadyWorker();
@@ -302,10 +324,17 @@
 		});
 	}
 
-	async function refreshFiles() {
-		if (!workerPool || !currentWorkerId || executionState.replState !== ReplState.READY) return;
+	async function executeRefresh(files: Record<string, string>, path: string) {
+		if (!workerPool || executionState.replState !== ReplState.READY) return;
 
-		const files = workspaceState.getFiles();
+		// Prevent concurrent executions
+		if (isExecutingRefresh) {
+			console.log('[executeRefresh] Already executing, skipping duplicate request');
+			return;
+		}
+
+		isExecutingRefresh = true;
+		console.log('[executeRefresh] Execution lock acquired');
 
 		console.group('🔄 Django Playground - Worker Pool Swap');
 		console.log('🔄 Swapping to fresh worker from pool');
@@ -342,11 +371,15 @@
 				type: 'execute',
 				payload: {
 					files,
-					path: pathState.currentPath,
+					path,
 					skipFileWrite: true, // Files already transferred during swap
 					cookies: executionState.getCookies()
 				}
 			});
+
+			// Release execution lock after message sent
+			isExecutingRefresh = false;
+			console.log('[executeRefresh] Execution lock released (success)');
 		} else {
 			console.log('❌ Failed to swap to fresh worker');
 			console.groupEnd();
@@ -354,6 +387,55 @@
 				timestamp: Date.now(),
 				type: 'error',
 				message: 'Failed to swap to fresh worker'
+			});
+
+			// Release execution lock on failure
+			isExecutingRefresh = false;
+			console.log('[executeRefresh] Execution lock released (swap failed)');
+		}
+	}
+
+	async function refreshFiles() {
+		if (!workerPool || executionState.replState !== ReplState.READY) return;
+
+		const files = workspaceState.getFiles();
+		const path = pathState.currentPath;
+
+		// Defensive check: ensure files are valid
+		if (!files || typeof files !== 'object' || Object.keys(files).length === 0) {
+			console.error('[RefreshFiles] Invalid files object:', files);
+			executionState.addLog({
+				timestamp: Date.now(),
+				type: 'error',
+				message: 'Cannot refresh: invalid file state'
+			});
+			return;
+		}
+
+		console.log('[RefreshFiles] Refreshing with', Object.keys(files).length, 'files to path:', path);
+
+		// Check if a worker is ready
+		const readyWorker = workerPool.getReadyWorker();
+
+		if (readyWorker) {
+			// Execute immediately
+			console.log('[RefreshFiles] Worker available, executing immediately');
+			latestPendingRefresh = null; // Clear any pending
+			executeRefresh(files, path);
+		} else {
+			// No worker ready - update the latest pending refresh
+			console.log('[RefreshFiles] No worker ready, queueing refresh');
+			const timestamp = Date.now();
+			latestPendingRefresh = {
+				files,
+				path,
+				timestamp
+			};
+			console.log('[RefreshFiles] Queued refresh with timestamp:', timestamp);
+			executionState.addLog({
+				timestamp,
+				type: 'info',
+				message: '⏳ Refresh queued, waiting for worker...'
 			});
 		}
 	}
@@ -441,6 +523,9 @@
 				{:else if executionState.replState === ReplState.RUNNING}
 					<span class="status-indicator running"></span>
 					<span>Running...</span>
+				{:else if latestPendingRefresh}
+					<span class="status-indicator pending"></span>
+					<span>Refresh Pending...</span>
 				{:else if executionState.replState === ReplState.READY}
 					<span class="status-indicator ready"></span>
 					<span>Ready</span>
@@ -453,7 +538,7 @@
 			{#if executionState.replState === ReplState.READY}
 				<Button size="default" onclick={refreshFiles}>
 					<RefreshCw class="size-4" />
-					Refresh
+					Refresh{latestPendingRefresh ? ' (Pending)' : ''}
 				</Button>
 			{:else}
 				<Button
@@ -604,6 +689,11 @@
 	.status-indicator.ready {
 		background: #4ec9b0;
 		animation: none;
+	}
+
+	.status-indicator.pending {
+		background: #d7ba7d;
+		animation: pulse 1.5s infinite;
 	}
 
 	@keyframes pulse {
