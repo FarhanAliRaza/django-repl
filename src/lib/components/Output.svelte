@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { executionState } from '$lib/stores/execution.svelte';
+	import { pathState } from '$lib/stores/path-state.svelte';
 	import Console from './Console.svelte';
 	import AddressBar from './AddressBar.svelte';
 	import { srcdocTemplate } from './srcdoc-template';
@@ -32,7 +33,8 @@
 					console.log('Sending existing HTML to newly ready iframe');
 					const message = {
 						type: 'update',
-						html: executionState.executionResult.html
+						html: executionState.executionResult.html,
+						currentPath: pathState.currentPath
 					};
 					iframeElement.contentWindow?.postMessage(message, '*');
 				}
@@ -80,7 +82,8 @@
 			try {
 				const message = {
 					type: 'update',
-					html: executionState.executionResult?.html || ''
+					html: executionState.executionResult?.html || '',
+					currentPath: pathState.currentPath
 				};
 				console.log('Posting message:', message.type);
 

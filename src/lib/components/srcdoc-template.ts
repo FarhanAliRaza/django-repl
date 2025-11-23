@@ -20,6 +20,9 @@ export const srcdocTemplate = `
 	<script>
 		console.log('IFrame srcdoc loaded');
 
+		// Track the current Django path (received from parent)
+		let currentPath = '/';
+
 		// Listen for messages from parent
 		window.addEventListener('message', (event) => {
 			// Ignore messages without data
@@ -31,6 +34,11 @@ export const srcdocTemplate = `
 
 			if (event.data.type === 'update') {
 				console.log('Updating content, HTML length:', event.data.html?.length);
+				// Update the current path if provided
+				if (event.data.currentPath) {
+					currentPath = event.data.currentPath;
+					console.log('Updated currentPath to:', currentPath);
+				}
 				// Update the content
 				document.getElementById('content').innerHTML = event.data.html;
 				console.log('Content updated');
@@ -97,8 +105,8 @@ export const srcdocTemplate = `
 			event.preventDefault();
 			event.stopPropagation();
 
-			// Get form details
-			const action = form.getAttribute('action') || window.location.pathname;
+			// Get form details - use tracked currentPath instead of window.location.pathname
+			const action = form.getAttribute('action') || currentPath;
 			const method = (form.getAttribute('method') || 'GET').toUpperCase();
 
 			// Collect form data
