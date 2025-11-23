@@ -20,13 +20,14 @@ export async function handleInit(isFirstLoad?: boolean): Promise<WorkerResponse>
 	if (success) {
 		await installDjango();
 
-		// For first load, create snapshot in background AFTER sending ready message
-		// This prevents blocking the worker from becoming ready
+		// For first load, create snapshot BEFORE sending ready message
+		// This ensures subsequent workers can restore from the snapshot immediately
 		if (isFirst) {
-			// Fire-and-forget snapshot creation (non-blocking)
-			createPyodideSnapshot().catch((error) => {
+			try {
+				await createPyodideSnapshot();
+			} catch (error) {
 				console.error('[message-handlers] Snapshot creation failed:', error);
-			});
+			}
 		}
 
 		return {

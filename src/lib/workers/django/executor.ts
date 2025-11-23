@@ -94,8 +94,6 @@ export async function executeDjangoView(
 	}
 
 	try {
-		const overallStartTime = performance.now();
-
 		// Always write files on first execution of this worker, even if skipFileWrite is true
 		if (!skipFileWrite || !filesWritten) {
 			const fileWriteStartTime = performance.now();
@@ -105,12 +103,8 @@ export async function executeDjangoView(
 			filesWritten = true;
 			const fileWriteDuration = performance.now() - fileWriteStartTime;
 			log(`File write completed in ${fileWriteDuration.toFixed(2)}ms`, 'info', 'worker');
-		} else {
-			// Navigation only - just log the path change
-			log(`Navigating to ${viewPath}`, 'info');
 		}
 
-		log('Executing Django WSGI handler...', 'info');
 		const startExec = Date.now();
 		const pythonExecStartTime = performance.now();
 
@@ -327,33 +321,13 @@ output
 		}
 
 		const execTime = ((Date.now() - startExec) / 1000).toFixed(2);
-		log(`Django view executed successfully (${status}) in ${execTime}s`, 'success');
-
-		// If this is a static file request, return it with appropriate metadata
-		if (isStaticFileRequest) {
-			const overallDuration = performance.now() - overallStartTime;
-			log(`Total executeDjangoView time: ${overallDuration.toFixed(2)}ms`, 'info', 'worker');
-			return {
-				success: true,
-				output: html || '', // For static files, content is in html
-				isStaticFile: true,
-				requestedPath: viewPath,
-				contentType: responseContentType || 'text/plain',
-				logs: getLogs()
-			};
-		}
+		log(`${pathOnly} (${status}) in ${execTime}s`, 'success');
 
 		// Process HTML to inline static files before returning
 		let processedHtml = html;
 		if (html && responseContentType?.includes('text/html')) {
-			const staticProcessStartTime = performance.now();
 			processedHtml = await inlineStaticFiles(html);
-			const staticProcessDuration = performance.now() - staticProcessStartTime;
-			log(`Static file inlining: ${staticProcessDuration.toFixed(2)}ms`, 'info', 'worker');
 		}
-
-		const overallDuration = performance.now() - overallStartTime;
-		log(`Total executeDjangoView time: ${overallDuration.toFixed(2)}ms`, 'info', 'worker');
 
 		return {
 			success: true,

@@ -6,8 +6,6 @@ let djangoInstalled = false;
 let isFirstLoad = true; // Will be set by the init message via setFirstLoad()
 const DJANGO_VERSION = '5.2'; // Track Django version for snapshot versioning (Python 3.13 compatible)
 
-console.log('[pyodide-manager] Module loaded with isFirstLoad:', isFirstLoad);
-
 export async function initializePyodide() {
 	try {
 		log('Loading Pyodide...', 'info', 'django');
@@ -34,9 +32,7 @@ export async function initializePyodide() {
 }
 
 export function setFirstLoad(value: boolean) {
-	console.log('[pyodide-manager] setFirstLoad called with:', value, 'current value:', isFirstLoad);
 	isFirstLoad = value;
-	console.log('[pyodide-manager] isFirstLoad is now:', isFirstLoad);
 }
 
 export async function installDjango() {
@@ -45,58 +41,14 @@ export async function installDjango() {
 		return true;
 	}
 
-	console.log('[pyodide-manager] installDjango called, isFirstLoad:', isFirstLoad);
-
 	try {
-		// On first page load, always install fresh from internet (don't use cache)
-		if (isFirstLoad) {
-			console.log('[pyodide-manager] First load detected, installing Django from internet');
-			log('Installing Django...', 'info', 'django');
-			isFirstLoad = false;
-
-			const micropip = pyodide.pyimport('micropip');
-
-			// Install Django from internet
-			await micropip.install('django');
-
-			// Load sqlite3 package
-			log('Loading SQLite3...', 'info', 'django');
-			await pyodide.loadPackage('sqlite3');
-
-			// Load tzdata package for timezone support
-			log('Loading tzdata...', 'info', 'django');
-			await pyodide.loadPackage('tzdata');
-
-			// Pre-import Django modules to warm up sys.modules cache
-			log('Pre-importing Django modules...', 'info', 'django');
-			const preImportStart = performance.now();
-			await pyodide.runPythonAsync(`
-import os
-import django
-from django.conf import settings
-from django.core.handlers.wsgi import WSGIHandler
-from django.contrib.staticfiles.handlers import StaticFilesHandler
-
-# Set Django environment variables (but don't call django.setup() yet)
-os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
-			`);
-			const preImportDuration = performance.now() - preImportStart;
-			log(`Django modules pre-imported in ${preImportDuration.toFixed(2)}ms`, 'success', 'django');
-
-			djangoInstalled = true;
-			log('Django installed successfully', 'success', 'django');
-
-			// Note: Snapshot creation will be triggered by message-handlers after 'ready' is sent
-			// This prevents blocking the worker from becoming ready
-
-			return true;
-		}
-
-		// On subsequent workers, try to use snapshot
+		// First, check if a snapshot exists in IndexedDB
+		// This is more reliable than relying on isFirstLoad flag (which is per-worker)
 		const snapshotExists = await hasSnapshot(DJANGO_VERSION);
 
-		if (snapshotExists) {
-			// Restore from snapshot (fast path)
+		if (snapshotExists && !isFirstLoad) {
+			// Restore from snapshot (fast path) - but only if NOT the first worker
+			// First worker should always install fresh even if old snapshot exists
 			log('Restoring Django from cache...', 'info', 'django');
 			const restored = await restoreSnapshot(pyodide, DJANGO_VERSION);
 
@@ -111,7 +63,6 @@ os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
 				// Pre-import Django modules to warm up sys.modules cache
 				// This makes the first view execution much faster
 				log('Pre-importing Django modules...', 'info', 'django');
-				const preImportStart = performance.now();
 				await pyodide.runPythonAsync(`
 import os
 import django
@@ -122,8 +73,6 @@ from django.contrib.staticfiles.handlers import StaticFilesHandler
 # Set Django environment variables (but don't call django.setup() yet)
 os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
 				`);
-				const preImportDuration = performance.now() - preImportStart;
-				log(`Django modules pre-imported in ${preImportDuration.toFixed(2)}ms`, 'success', 'django');
 
 				djangoInstalled = true;
 				log('Django restored successfully', 'success', 'django');
@@ -133,7 +82,10 @@ os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
 			}
 		}
 
-		// Fallback: Fresh installation if no snapshot or restore failed
+		// Fresh installation if:
+		// 1. No snapshot exists (first worker ever), OR
+		// 2. This is marked as first load (first worker of this session), OR
+		// 3. Snapshot restore failed
 		log('Installing Django...', 'info', 'django');
 		const micropip = pyodide.pyimport('micropip');
 
@@ -150,7 +102,6 @@ os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
 
 		// Pre-import Django modules to warm up sys.modules cache
 		log('Pre-importing Django modules...', 'info', 'django');
-		const preImportStart = performance.now();
 		await pyodide.runPythonAsync(`
 import os
 import django
@@ -161,16 +112,12 @@ from django.contrib.staticfiles.handlers import StaticFilesHandler
 # Set Django environment variables (but don't call django.setup() yet)
 os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
 		`);
-		const preImportDuration = performance.now() - preImportStart;
-		log(`Django modules pre-imported in ${preImportDuration.toFixed(2)}ms`, 'success', 'django');
 
 		djangoInstalled = true;
 		log('Django installed successfully', 'success', 'django');
 
-		// Create snapshot for future use (non-blocking since this is a fallback case)
-		createSnapshot(pyodide, DJANGO_VERSION).catch((error) => {
-			log(`Failed to create snapshot: ${error}`, 'warning', 'django');
-		});
+		// Note: Snapshot creation is handled by message-handlers.ts after 'ready' is sent
+		// This prevents duplicate snapshot creation and ensures it's only done for first worker
 
 		return true;
 	} catch (error) {
@@ -209,7 +156,6 @@ export async function createPyodideSnapshot(): Promise<void> {
 		return;
 	}
 
-	console.log('[pyodide-manager] Creating snapshot for faster reloads...');
 	try {
 		await createSnapshot(pyodide, DJANGO_VERSION);
 	} catch (error) {

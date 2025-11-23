@@ -25,7 +25,7 @@ export class WorkerPool {
 
 	/**
 	 * Initialize the worker pool with pre-warmed workers
-	 * First worker is awaited, then second worker warms in background
+	 * First worker is awaited and creates snapshot, then remaining workers warm sequentially
 	 */
 	async initialize(
 		onLog?: (message: string) => void,
@@ -33,15 +33,27 @@ export class WorkerPool {
 	): Promise<void> {
 		onLog?.('Initializing worker pool...');
 
-		// Warm first worker and wait for it (this becomes the active worker)
+		// Warm first worker and wait for it (this becomes the active worker and creates snapshot)
 		await this.createAndWarmWorker(onLog, onMessage);
 		onLog?.('First worker ready, warming additional workers in background...');
 
-		// Warm remaining workers in background (don't await)
+		// CRITICAL: Start warming remaining workers SEQUENTIALLY after first is ready
+		// This ensures they can use the snapshot created by the first worker
+		// We still don't await them (they warm in background), but they start one by one
+		this.warmRemainingWorkersSequentially(onLog);
+	}
+
+	/**
+	 * Warm remaining workers sequentially in the background
+	 * This ensures each worker can use the snapshot from the first worker
+	 */
+	private async warmRemainingWorkersSequentially(onLog?: (message: string) => void): Promise<void> {
 		for (let i = 1; i < this.poolSize; i++) {
-			this.createAndWarmWorker(onLog).catch((err) => {
-				onLog?.(`Failed to warm background worker: ${err.message}`);
-			});
+			try {
+				await this.createAndWarmWorker(onLog);
+			} catch (err) {
+				onLog?.(`Failed to warm background worker: ${(err as Error).message}`);
+			}
 		}
 	}
 
@@ -112,8 +124,13 @@ export class WorkerPool {
 					onLog?.(`Worker ${pooledWorker.id} is ready`);
 					// Remove warmup listener to prevent duplicate messages
 					pooledWorker.worker.removeEventListener('message', messageHandler);
-					// Only use isFirstLoad for the first worker - set AFTER resolve to ensure snapshot is complete
-					this.isFirstLoad = false;
+
+					// Set isFirstLoad to false BEFORE resolving
+					// This ensures next worker sees the updated flag
+					if (this.isFirstLoad) {
+						this.isFirstLoad = false;
+					}
+
 					resolve();
 				} else if (response.type === 'error') {
 					clearTimeout(timeout);

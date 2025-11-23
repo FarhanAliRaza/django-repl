@@ -49,8 +49,6 @@
 		}
 	}
 
-	$inspect(executionState.replState);
-
 	let disabled = $derived.by(() => {
 		if (executionState.replState == ReplState.READY || executionState.replState == ReplState.IDLE) {
 			return false;
