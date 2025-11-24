@@ -26,20 +26,29 @@ export async function handleInit(isFirstLoad?: boolean): Promise<WorkerResponse>
 	if (success) {
 		await installDjango();
 
-		// For first load, create snapshot BEFORE sending ready message
-		// This ensures subsequent workers can restore from the snapshot immediately
-		if (isFirst) {
-			try {
-				await createPyodideSnapshot();
-			} catch (error) {
-				console.error('[message-handlers] Snapshot creation failed:', error);
-			}
-		}
-
-		return {
+		// Send ready message immediately - worker is ready to execute Django code
+		// This allows the UI to transition from INITIALIZING → IDLE without waiting for snapshot
+		const readyResponse: WorkerResponse = {
 			type: 'ready',
 			payload: { success: true }
 		};
+
+		// For first load, create snapshot AFTER sending ready message
+		// This runs in background and doesn't block the UI from becoming interactive
+		// Subsequent workers will benefit from this snapshot
+		if (isFirst) {
+			// Send ready message first (we'll return this response)
+			// Then create snapshot asynchronously (don't await - let it run in background)
+			createPyodideSnapshot()
+				.then(() => {
+					console.log('[message-handlers] Snapshot created successfully in background');
+				})
+				.catch((error) => {
+					console.error('[message-handlers] Background snapshot creation failed:', error);
+				});
+		}
+
+		return readyResponse;
 	} else {
 		return {
 			type: 'ready',

@@ -142,6 +142,10 @@
 
 		// Mark worker as ready - this transitions state from INITIALIZING → IDLE
 		executionState.setWorkerReady();
+
+		// Automatically run the Django project when worker becomes ready
+		// This gives immediate feedback without requiring user to click "Run"
+		runCode();
 	}
 
 	onMount(() => {
