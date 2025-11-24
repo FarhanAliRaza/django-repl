@@ -144,8 +144,14 @@
 		executionState.setWorkerReady();
 
 		// Automatically run the Django project when worker becomes ready
-		// This gives immediate feedback without requiring user to click "Run"
-		runCode();
+		// SECURITY: Only auto-run for fresh projects, NOT for shared projects from URLs
+		// Shared projects could contain malicious code, so require explicit user action
+		const hasUrlHash = browser && window.location.hash.length > 1;
+		if (!hasUrlHash) {
+			// Fresh project - safe to auto-run
+			runCode();
+		}
+		// For shared projects, user must click "Run" button manually
 	}
 
 	onMount(() => {
