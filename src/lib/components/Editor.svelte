@@ -17,16 +17,20 @@
 	let editorElement: HTMLDivElement;
 	let editorView: EditorView | null = null;
 	let lastLoadedFile = $state('');
+	let lastReloadTrigger = $state(0); // Track last processed trigger value
 	let updateTimeout: ReturnType<typeof setTimeout> | null = null;
 
-	// Update editor when file changes
+	// Update editor when file changes or when files are bulk loaded (e.g., from share)
 	$effect(() => {
 		const file = workspaceState.currentFile;
 		const files = workspaceState.files;
+		const reloadTrigger = workspaceState.fileReloadTrigger;
 
-		if (editorView && file && file !== lastLoadedFile) {
+		// Update editor if: file name changed OR reload trigger changed
+		if (editorView && file && (file !== lastLoadedFile || reloadTrigger !== lastReloadTrigger)) {
 			const content = files[file] || '';
 			lastLoadedFile = file;
+			lastReloadTrigger = reloadTrigger; // Remember this trigger value
 
 			editorView.dispatch({
 				changes: {

@@ -1,5 +1,11 @@
 import type { WorkerRequest, WorkerResponse } from '$lib/types';
-import { initializePyodide, installDjango, installPackage, setFirstLoad, createPyodideSnapshot } from '../pyodide-manager';
+import {
+	initializePyodide,
+	installDjango,
+	installPackage,
+	setFirstLoad,
+	createPyodideSnapshot
+} from '../pyodide-manager';
 import { executePython, executeDjangoView } from '../django/executor';
 import { runMigrations, makeMigrations, createSuperuser } from '../django/management';
 import {
@@ -7,7 +13,7 @@ import {
 	getDatabaseFromVirtualFS,
 	setDatabaseToVirtualFS
 } from '../filesystem';
-import { log, getLogs } from '../logger';
+import { getLogs } from '../logger';
 
 export async function handleInit(isFirstLoad?: boolean): Promise<WorkerResponse> {
 	// Set the first load flag if provided
@@ -125,9 +131,7 @@ export async function handleRunMigrations(files: Record<string, string>): Promis
 	};
 }
 
-export async function handleMakeMigrations(
-	files: Record<string, string>
-): Promise<WorkerResponse> {
+export async function handleMakeMigrations(files: Record<string, string>): Promise<WorkerResponse> {
 	const result = await makeMigrations(files);
 	return {
 		type: 'result',

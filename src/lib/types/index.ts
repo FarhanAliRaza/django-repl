@@ -82,3 +82,12 @@ export interface DjangoProject {
 	name: string;
 	files: Record<string, string>;
 }
+
+// Shared project structure (for URL sharing)
+export interface SharedProject {
+	name: string;
+	files: Record<string, string>;
+}
+
+// Share-related errors
+export type ShareError = 'compression_failed' | 'decompression_failed' | 'invalid_data' | 'url_too_long';

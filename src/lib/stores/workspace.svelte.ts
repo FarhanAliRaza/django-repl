@@ -273,6 +273,8 @@ urlpatterns = [
 class WorkspaceState {
 	files = $state<Record<string, string>>(defaultDjangoProject);
 	currentFile = $state<string>('myapp/views.py');
+	projectName = $state<string>('Django Playground');
+	fileReloadTrigger = $state<number>(0); // Increments when files are bulk loaded
 
 	// Derived file tree structure
 	fileTree = $derived.by(() => {
@@ -371,6 +373,34 @@ class WorkspaceState {
 		const snapshot = $state.snapshot(this.files);
 
 		return snapshot;
+	}
+
+	// Serialize workspace to JSON for sharing
+	toJSON(): { name: string; files: Record<string, string> } {
+		return {
+			name: this.projectName,
+			files: this.getFiles()
+		};
+	}
+
+	// Load workspace from JSON (for shared projects)
+	fromJSON(data: { name: string; files: Record<string, string> }) {
+		this.projectName = data.name;
+		this.files = { ...data.files };
+		this.fileReloadTrigger++; // Trigger editor reload for currently open file
+
+		// Set first Python file as current file if current file doesn't exist
+		if (!this.files[this.currentFile]) {
+			const pythonFiles = Object.keys(this.files).filter((path) => path.endsWith('.py'));
+			if (pythonFiles.length > 0) {
+				this.currentFile = pythonFiles[0];
+			}
+		}
+	}
+
+	// Update project name
+	setProjectName(name: string) {
+		this.projectName = name;
 	}
 }
 

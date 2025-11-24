@@ -10,9 +10,10 @@
 	import * as Resizable from '$lib/components/ui/resizable/index.js';
 	import { Button } from '$lib/components/ui/button';
 	import { pathState } from '$lib/stores/path-state.svelte';
-	import { RefreshCw, Play } from '@lucide/svelte';
+	import { RefreshCw, Play, Link2 } from '@lucide/svelte';
 	import { WorkerPool } from '$lib/worker-pool';
 	import type { HttpMethod } from '$lib/types';
+	import { shareState } from '$lib/stores/share.svelte';
 
 	let workerPool: WorkerPool | null = null;
 	let currentWorkerId: string | null = $state(null);
@@ -22,6 +23,8 @@
 		timestamp: number;
 	} | null = $state(null);
 	let isExecutingRefresh: boolean = $state(false); // Prevent concurrent refresh executions
+	let showShareToast = $state(false);
+	let shareToastMessage = $state('');
 
 	// Message handler for worker pool responses
 	function handleWorkerMessage(response: WorkerResponse) {
@@ -142,8 +145,12 @@
 	}
 
 	onMount(() => {
-		// Load saved files from localStorage
-		// workspaceFiles.loadFromLocalStorage();
+		// Try to load from URL hash first (shared project)
+		shareState.loadFromHash().then((sharedData) => {
+			if (sharedData) {
+				workspaceState.fromJSON(sharedData);
+			}
+		});
 
 		// Load saved path from localStorage
 		pathState.loadFromLocalStorage();
@@ -182,16 +189,27 @@
 			}
 		};
 
+		// Listen for hash changes (when user navigates back/forward with shared URLs)
+		const handleHashChange = () => {
+			shareState.loadFromHash().then((sharedData) => {
+				if (sharedData) {
+					workspaceState.fromJSON(sharedData);
+				}
+			});
+		};
+
 		window.addEventListener('django-navigate', handleNavigation as EventListener);
 		window.addEventListener('address-bar-navigate', handleAddressBarNavigate as EventListener);
 		window.addEventListener('django-form-submit', handleFormSubmit as EventListener);
 		window.addEventListener('editor-save', handleEditorSave);
+		window.addEventListener('hashchange', handleHashChange);
 
 		const cleanup = () => {
 			window.removeEventListener('django-navigate', handleNavigation as EventListener);
 			window.removeEventListener('address-bar-navigate', handleAddressBarNavigate as EventListener);
 			window.removeEventListener('django-form-submit', handleFormSubmit as EventListener);
 			window.removeEventListener('editor-save', handleEditorSave);
+			window.removeEventListener('hashchange', handleHashChange);
 		};
 
 		// Initialize worker pool
@@ -468,6 +486,27 @@
 			}
 		});
 	}
+
+	async function handleShare() {
+		try {
+			const data = workspaceState.toJSON();
+			const url = await shareState.generateUrl(data.name, data.files);
+			const copied = await shareState.copyToClipboard(url);
+
+			if (copied) {
+				shareToastMessage = 'Link copied to clipboard!';
+				showShareToast = true;
+				setTimeout(() => {
+					showShareToast = false;
+				}, 3000);
+			} else {
+				alert('Failed to copy link. Please try again.');
+			}
+		} catch (error) {
+			console.error('Failed to generate share link:', error);
+			alert('Failed to generate share link. The project might be too large.');
+		}
+	}
 </script>
 
 <div class="playground">
@@ -504,6 +543,11 @@
 					<span>Ready</span>
 				{/if}
 			</div>
+
+			<Button size="default" variant="outline" onclick={handleShare} title="Share project">
+				<Link2 class="size-4" />
+				Share
+			</Button>
 
 			{#if executionState.replState === ReplState.READY}
 				<Button size="default" onclick={refreshFiles}>
@@ -555,6 +599,12 @@
 			</Resizable.Pane>
 		</Resizable.PaneGroup>
 	</div>
+
+	{#if showShareToast}
+		<div class="toast">
+			{shareToastMessage}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -702,5 +752,31 @@
 		height: 100%;
 		width: 100%;
 		overflow: hidden;
+	}
+
+	.toast {
+		position: fixed;
+		bottom: 24px;
+		right: 24px;
+		background: #4ec9b0;
+		color: #1e1e1e;
+		padding: 12px 20px;
+		border-radius: 6px;
+		font-size: 14px;
+		font-weight: 500;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		animation: slideIn 0.3s ease-out;
+		z-index: 1000;
+	}
+
+	@keyframes slideIn {
+		from {
+			transform: translateY(100px);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
 	}
 </style>
