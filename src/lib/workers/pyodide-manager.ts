@@ -54,11 +54,12 @@ export async function installDjango() {
 
 			if (restored) {
 				// Still need to load these binary packages (they're not in site-packages)
-				log('Loading SQLite3...', 'info', 'django');
-				await pyodide.loadPackage('sqlite3');
-
-				log('Loading tzdata...', 'info', 'django');
-				await pyodide.loadPackage('tzdata');
+				// Load them in parallel for faster initialization
+				log('Loading SQLite3 and tzdata in parallel...', 'info', 'django');
+				await Promise.all([
+					pyodide.loadPackage('sqlite3'),
+					pyodide.loadPackage('tzdata')
+				]);
 
 				// Pre-import Django modules to warm up sys.modules cache
 				// This makes the first view execution much faster
@@ -86,19 +87,20 @@ os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
 		// 1. No snapshot exists (first worker ever), OR
 		// 2. This is marked as first load (first worker of this session), OR
 		// 3. Snapshot restore failed
-		log('Installing Django...', 'info', 'django');
+		log('Installing Django and all dependencies in parallel...', 'info', 'django');
 		const micropip = pyodide.pyimport('micropip');
 
-		// Install Django
-		await micropip.install('django');
+		// Install all packages in parallel for faster initialization
+		// Include Django's dependencies (asgiref, sqlparse) explicitly to avoid sequential resolution
+		await Promise.all([
+			micropip.install('django'),
+			micropip.install('asgiref'),
+			micropip.install('sqlparse'),
+			pyodide.loadPackage('sqlite3'),
+			pyodide.loadPackage('tzdata')
+		]);
 
-		// Load sqlite3 package
-		log('Loading SQLite3...', 'info', 'django');
-		await pyodide.loadPackage('sqlite3');
-
-		// Load tzdata package for timezone support
-		log('Loading tzdata...', 'info', 'django');
-		await pyodide.loadPackage('tzdata');
+		log('All packages installed', 'success', 'django');
 
 		// Pre-import Django modules to warm up sys.modules cache
 		log('Pre-importing Django modules...', 'info', 'django');
