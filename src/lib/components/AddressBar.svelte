@@ -46,28 +46,28 @@
 	let canGoBack = $derived(pathState.canGoBack);
 </script>
 
-<div class="flex items-center gap-2 border-b bg-white px-3 py-2">
+<div class="flex items-center gap-2 border-b border-border bg-card px-3 py-2">
 	<button
-		class="flex size-8 items-center justify-center rounded-md border text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+		class="flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
 		onclick={handleBack}
 		disabled={!canGoBack}
 		title="Go back"
 	>
 		<ArrowLeft class="size-4" />
 	</button>
-	<div class="flex flex-1 items-center gap-2 rounded-md border bg-white px-3 py-1.5 text-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
+	<div class="flex flex-1 items-center gap-2 rounded-md border border-border bg-background/50 px-3 py-1.5 text-sm focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20">
 		<Lock class="size-3.5 text-emerald-500" />
-		<span class="text-gray-500">localhost:8000</span>
+		<span class="text-muted-foreground">localhost:8000</span>
 		<input
 			type="text"
-			class="flex-1 bg-transparent font-mono text-sm text-gray-900 outline-none placeholder:text-gray-400"
+			class="flex-1 bg-transparent font-mono text-sm text-foreground outline-none placeholder:text-muted-foreground"
 			bind:value={inputValue}
 			onkeydown={handleKeydown}
 			placeholder="/"
 		/>
 	</div>
 	<button
-		class="flex size-8 items-center justify-center rounded-md border text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 active:scale-95"
+		class="flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-95"
 		onclick={handleRefresh}
 		title="Reload"
 	>
