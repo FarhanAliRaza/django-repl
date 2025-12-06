@@ -32,6 +32,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.38.8
         version: 6.38.8
+      '@vercel/analytics':
+        specifier: ^1.6.1
+        version: 1.6.1(@sveltejs/kit@2.48.5(@sveltejs/vite-plugin-svelte@6.2.1(svelte@5.43.12)(vite@7.2.2(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.2)))(svelte@5.43.12)(vite@7.2.2(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.2)))(svelte@5.43.12)
       codemirror:
         specifier: ^6.0.2
         version: 6.0.2
@@ -779,6 +782,32 @@ packages:
   '@typescript-eslint/visitor-keys@8.47.0':
     resolution: {integrity: sha512-SIV3/6eftCy1bNzCQoPmbWsRLujS8t5iDIZ4spZOBHqrM+yfX2ogg8Tt3PDTAVKw3sSCiUgg30uOAvK2r9zGjQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@vercel/analytics@1.6.1':
+    resolution: {integrity: sha512-oH9He/bEM+6oKlv3chWuOOcp8Y6fo6/PSro8hEkgCW3pu9/OiCXiUpRUogDh3Fs3LH2sosDrx8CxeOLBEE+afg==}
+    peerDependencies:
+      '@remix-run/react': ^2
+      '@sveltejs/kit': ^1 || ^2
+      next: '>= 13'
+      react: ^18 || ^19 || ^19.0.0-rc
+      svelte: '>= 4'
+      vue: ^3
+      vue-router: ^4
+    peerDependenciesMeta:
+      '@remix-run/react':
+        optional: true
+      '@sveltejs/kit':
+        optional: true
+      next:
+        optional: true
+      react:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
+      vue-router:
+        optional: true
 
   '@vitest/browser-playwright@4.0.10':
     resolution: {integrity: sha512-pm7Hl7BNyluox+uGJPnT7vCRDSI+ibHcWQRtnCACAZWxD6/b2gN+8pO0qTDPHpxDSTPKDS5sT2dKTHLcr+lsng==}
@@ -2391,6 +2420,11 @@ snapshots:
     dependencies:
       '@typescript-eslint/types': 8.47.0
       eslint-visitor-keys: 4.2.1
+
+  '@vercel/analytics@1.6.1(@sveltejs/kit@2.48.5(@sveltejs/vite-plugin-svelte@6.2.1(svelte@5.43.12)(vite@7.2.2(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.2)))(svelte@5.43.12)(vite@7.2.2(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.2)))(svelte@5.43.12)':
+    optionalDependencies:
+      '@sveltejs/kit': 2.48.5(@sveltejs/vite-plugin-svelte@6.2.1(svelte@5.43.12)(vite@7.2.2(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.2)))(svelte@5.43.12)(vite@7.2.2(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.2))
+      svelte: 5.43.12
 
   '@vitest/browser-playwright@4.0.10(playwright@1.56.1)(vite@7.2.2(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.2))(vitest@4.0.10)':
     dependencies:

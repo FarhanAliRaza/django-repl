@@ -1,8 +1,10 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
-
+	import { injectAnalytics } from '@vercel/analytics/sveltekit';
+	import { dev } from '$app/environment';
 	let { children } = $props();
+	injectAnalytics({ mode: dev ? 'development' : 'production' });
 </script>
 
 <svelte:head>
