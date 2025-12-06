@@ -306,26 +306,19 @@ export class WorkerPool {
 				if (response.type === 'database') {
 					clearTimeout(timeout);
 					worker.worker.removeEventListener('message', messageHandler);
-					const payload = response.payload as { dbData: Uint8Array };
+					const payload = response.payload as { dbData: Uint8Array | null };
 					const duration = performance.now() - startTime;
 					if (payload.dbData) {
 						console.log(
 							`[WorkerPool] Got database from ${worker.id}: ${payload.dbData.length} bytes in ${duration.toFixed(2)}ms`
 						);
+						resolve(payload.dbData);
 					} else {
 						console.log(
 							`[WorkerPool] No database data from ${worker.id} (${duration.toFixed(2)}ms)`
 						);
+						resolve(null);
 					}
-					resolve(payload.dbData);
-				} else if (response.type === 'error') {
-					clearTimeout(timeout);
-					worker.worker.removeEventListener('message', messageHandler);
-					const duration = performance.now() - startTime;
-					console.error(
-						`[WorkerPool] Error getting database from ${worker.id} after ${duration.toFixed(2)}ms`
-					);
-					resolve(null);
 				}
 			};
 

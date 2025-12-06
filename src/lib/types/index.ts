@@ -74,7 +74,7 @@ export interface WorkerRequest {
 
 export interface WorkerResponse {
 	type: 'ready' | 'result' | 'error' | 'log' | 'database';
-	payload?: ExecutionResult | LogEntry | { message: string } | { success: boolean } | { dbData: Uint8Array };
+	payload?: ExecutionResult | LogEntry | { message: string } | { success: boolean } | { dbData: Uint8Array | null };
 }
 
 // Django project structure

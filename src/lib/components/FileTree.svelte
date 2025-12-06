@@ -2,6 +2,7 @@
 	import { workspaceState } from '$lib/stores/workspace.svelte';
 	import type { FileNode } from '$lib/types';
 	import TreeNode from './TreeNode.svelte';
+	import { FilePlus, FolderPlus, Trash2 } from '@lucide/svelte';
 
 	let expandedDirs = $state(
 		new Set<string>(['myproject', 'myapp', 'myapp/migrations', 'templates'])
@@ -163,7 +164,7 @@
 
 <div class="file-tree" oncontextmenu={handleRootContextMenu}>
 	<div class="file-tree-header">
-		<span>FILES</span>
+		<span class="header-title">Explorer</span>
 		<div class="header-actions">
 			<button
 				class="icon-button"
@@ -173,7 +174,7 @@
 					startNewFile();
 				}}
 			>
-				📄
+				<FilePlus class="size-4" />
 			</button>
 			<button
 				class="icon-button"
@@ -183,7 +184,7 @@
 					startNewFolder();
 				}}
 			>
-				📁
+				<FolderPlus class="size-4" />
 			</button>
 		</div>
 	</div>
@@ -214,13 +215,15 @@
 				class="context-menu-item"
 				onclick={() => startNewFile(contextMenuPath)}
 			>
-				New File
+				<FilePlus class="size-4" />
+				<span>New File</span>
 			</button>
 			<button
 				class="context-menu-item"
 				onclick={() => startNewFolder(contextMenuPath)}
 			>
-				New Folder
+				<FolderPlus class="size-4" />
+				<span>New Folder</span>
 			</button>
 			<div class="context-menu-divider"></div>
 		{/if}
@@ -228,7 +231,8 @@
 			class="context-menu-item danger"
 			onclick={() => deleteItem(contextMenuPath)}
 		>
-			Delete
+			<Trash2 class="size-4" />
+			<span>Delete</span>
 		</button>
 	</div>
 {/if}
@@ -263,8 +267,8 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-		background: #252526;
-		color: #cccccc;
+		background: var(--sidebar);
+		color: var(--sidebar-foreground);
 		user-select: none;
 	}
 
@@ -272,33 +276,43 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 10px 12px;
-		background: #2d2d30;
-		border-bottom: 1px solid #3e3e42;
+		padding: 12px 12px;
+		background: var(--sidebar);
+		border-bottom: 1px solid var(--sidebar-border);
 		font-size: 11px;
-		font-weight: 500;
+		font-weight: 600;
 		text-transform: uppercase;
-		color: #999;
+		letter-spacing: 0.05em;
+		color: var(--muted-foreground);
+	}
+
+	.header-title {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 
 	.header-actions {
 		display: flex;
-		gap: 4px;
+		gap: 2px;
 	}
 
 	.icon-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		background: transparent;
 		border: none;
-		color: #cccccc;
+		color: var(--muted-foreground);
 		cursor: pointer;
-		padding: 2px 6px;
-		border-radius: 3px;
-		font-size: 14px;
-		transition: background 0.1s;
+		padding: 6px;
+		border-radius: var(--radius-sm);
+		transition: all 0.15s ease;
 	}
 
 	.icon-button:hover {
-		background: #3e3e42;
+		background: var(--sidebar-accent);
+		color: var(--sidebar-accent-foreground);
 	}
 
 	.file-tree-content {
@@ -308,62 +322,65 @@
 	}
 
 	.file-tree-content::-webkit-scrollbar {
-		width: 10px;
+		width: 8px;
 	}
 
 	.file-tree-content::-webkit-scrollbar-track {
-		background: #252526;
+		background: transparent;
 	}
 
 	.file-tree-content::-webkit-scrollbar-thumb {
-		background: #424242;
-		border-radius: 5px;
+		background: var(--border);
+		border-radius: 4px;
 	}
 
 	.file-tree-content::-webkit-scrollbar-thumb:hover {
-		background: #4e4e4e;
+		background: var(--muted-foreground);
 	}
 
 	/* Context Menu */
 	.context-menu {
 		position: fixed;
-		background: #2d2d30;
-		border: 1px solid #3e3e42;
-		border-radius: 4px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+		background: var(--popover);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
 		z-index: 1000;
 		min-width: 180px;
-		padding: 4px 0;
+		padding: 4px;
 	}
 
 	.context-menu-item {
-		display: block;
+		display: flex;
+		align-items: center;
+		gap: 10px;
 		width: 100%;
-		padding: 8px 16px;
+		padding: 8px 12px;
 		background: transparent;
 		border: none;
-		color: #cccccc;
+		color: var(--popover-foreground);
 		text-align: left;
 		cursor: pointer;
 		font-size: 13px;
-		transition: background 0.1s;
+		border-radius: var(--radius-sm);
+		transition: background 0.15s ease;
 	}
 
 	.context-menu-item:hover {
-		background: #094771;
+		background: var(--accent);
 	}
 
 	.context-menu-item.danger {
-		color: #f48771;
+		color: var(--destructive);
 	}
 
 	.context-menu-item.danger:hover {
-		background: #5a1d1d;
+		background: oklch(0.577 0.245 27.325 / 15%);
 	}
 
 	.context-menu-divider {
 		height: 1px;
-		background: #3e3e42;
+		background: var(--border);
 		margin: 4px 0;
 	}
 
@@ -374,47 +391,51 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		background: rgba(0, 0, 0, 0.6);
+		background: rgba(0, 0, 0, 0.7);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		z-index: 2000;
+		backdrop-filter: blur(2px);
 	}
 
 	.dialog {
-		background: #2d2d30;
-		border: 1px solid #3e3e42;
-		border-radius: 6px;
-		padding: 20px;
+		background: var(--card);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		padding: 24px;
 		min-width: 400px;
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+		box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
 	}
 
 	.dialog h3 {
 		margin: 0 0 16px 0;
-		color: #cccccc;
+		color: var(--card-foreground);
 		font-size: 16px;
+		font-weight: 600;
 	}
 
 	.dialog input {
 		width: 100%;
-		padding: 8px 12px;
-		background: #1e1e1e;
-		border: 1px solid #3e3e42;
-		border-radius: 4px;
-		color: #cccccc;
+		padding: 10px 12px;
+		background: var(--input);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		color: var(--foreground);
 		font-size: 14px;
 		font-family: 'Consolas', 'Monaco', monospace;
+		transition: border-color 0.15s ease, box-shadow 0.15s ease;
 	}
 
 	.dialog input:focus {
 		outline: none;
-		border-color: #007acc;
+		border-color: var(--ring);
+		box-shadow: 0 0 0 2px oklch(from var(--ring) l c h / 25%);
 	}
 
 	.parent-path {
 		margin: 8px 0 0 0;
-		color: #999;
+		color: var(--muted-foreground);
 		font-size: 12px;
 		font-family: 'Consolas', 'Monaco', monospace;
 	}
@@ -423,34 +444,35 @@
 		display: flex;
 		gap: 8px;
 		justify-content: flex-end;
-		margin-top: 16px;
+		margin-top: 20px;
 	}
 
 	.btn-primary,
 	.btn-secondary {
-		padding: 8px 16px;
+		padding: 10px 18px;
 		border: none;
-		border-radius: 4px;
+		border-radius: var(--radius-md);
 		cursor: pointer;
-		font-size: 13px;
-		transition: background 0.1s;
+		font-size: 14px;
+		font-weight: 500;
+		transition: all 0.15s ease;
 	}
 
 	.btn-primary {
-		background: #0e639c;
-		color: #ffffff;
+		background: var(--primary);
+		color: var(--primary-foreground);
 	}
 
 	.btn-primary:hover {
-		background: #1177bb;
+		opacity: 0.9;
 	}
 
 	.btn-secondary {
-		background: #3e3e42;
-		color: #cccccc;
+		background: var(--secondary);
+		color: var(--secondary-foreground);
 	}
 
 	.btn-secondary:hover {
-		background: #505050;
+		opacity: 0.9;
 	}
 </style>

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { executionState, ReplState } from '$lib/stores/execution.svelte';
 	import type { LogEntry } from '$lib/types';
+	import { Terminal, Database, DatabaseBackup, UserPlus, Trash2 } from '@lucide/svelte';
 
 	interface Props {
 		onRunMigrations?: () => void;
@@ -14,16 +15,16 @@
 		return new Date(timestamp).toLocaleTimeString();
 	}
 
-	function getLogColor(type: LogEntry['type']): string {
+	function getLogClass(type: LogEntry['type']): string {
 		switch (type) {
 			case 'success':
-				return '#4ec9b0';
+				return 'log-success';
 			case 'error':
-				return '#f48771';
+				return 'log-error';
 			case 'warning':
-				return '#dcdcaa';
+				return 'log-warning';
 			default:
-				return '#abb2bf';
+				return 'log-info';
 		}
 	}
 
@@ -59,28 +60,42 @@
 
 <div class="console">
 	<div class="console-header">
-		<span>Console</span>
+		<div class="console-title">
+			<Terminal class="size-4" />
+			<span>Console</span>
+		</div>
 		<div class="console-actions">
-			<button class="action-btn django-btn" onclick={handleMakeMigrations} {disabled}>
-				Make Migrations
+			<button class="action-btn" onclick={handleMakeMigrations} {disabled}>
+				<DatabaseBackup class="size-3.5" />
+				<span>Make Migrations</span>
 			</button>
-			<button class="action-btn django-btn" onclick={handleMigrate} {disabled}> Migrate </button>
+			<button class="action-btn" onclick={handleMigrate} {disabled}>
+				<Database class="size-3.5" />
+				<span>Migrate</span>
+			</button>
 			<button
-				class="action-btn django-btn superuser-btn"
+				class="action-btn superuser-btn"
 				onclick={handleCreateSuperuser}
 				{disabled}
 			>
-				Create Superuser
+				<UserPlus class="size-3.5" />
+				<span>Create Superuser</span>
 			</button>
-			<button class="action-btn clear-btn" onclick={clearConsole}>Clear</button>
+			<button class="action-btn clear-btn" onclick={clearConsole}>
+				<Trash2 class="size-3.5" />
+				<span>Clear</span>
+			</button>
 		</div>
 	</div>
 	<div class="console-content">
 		{#if executionState.logs.length === 0}
-			<div class="empty-state">No logs yet. Run your Django app to see output.</div>
+			<div class="empty-state">
+				<Terminal class="size-8 opacity-40" />
+				<p>No logs yet. Run your Django app to see output.</p>
+			</div>
 		{:else}
 			{#each executionState.logs as log, index (index)}
-				<div class="log-entry" style="color: {getLogColor(log.type)}">
+				<div class="log-entry {getLogClass(log.type)}">
 					<span class="log-time">[{formatTime(log.timestamp)}]</span>
 					<span class="log-message">{log.message}</span>
 				</div>
@@ -94,39 +109,51 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-		background: #1e1e1e;
-		color: #d4d4d4;
+		background: var(--background);
+		color: var(--foreground);
 	}
 
 	.console-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 8px 16px;
-		background: #252526;
-		border-bottom: 1px solid #3e3e42;
+		padding: 8px 12px;
+		background: var(--card);
+		border-bottom: 1px solid var(--border);
 		font-size: 13px;
+	}
+
+	.console-title {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-weight: 500;
+		color: var(--muted-foreground);
 	}
 
 	.console-actions {
 		display: flex;
-		gap: 8px;
+		gap: 6px;
 	}
 
 	.action-btn {
-		background: transparent;
-		border: 1px solid #3e3e42;
-		color: #d4d4d4;
-		padding: 4px 12px;
-		border-radius: 4px;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		background: var(--secondary);
+		border: 1px solid var(--border);
+		color: var(--secondary-foreground);
+		padding: 5px 10px;
+		border-radius: var(--radius-md);
 		cursor: pointer;
 		font-size: 12px;
-		transition: all 0.2s;
+		font-weight: 500;
+		transition: all 0.15s ease;
 	}
 
 	.action-btn:hover:not(:disabled) {
-		background: #3e3e42;
-		border-color: #565656;
+		background: var(--accent);
+		border-color: var(--border);
 	}
 
 	.action-btn:disabled {
@@ -134,25 +161,27 @@
 		cursor: not-allowed;
 	}
 
-	.django-btn {
-		background: #0e639c;
-		border-color: #1177bb;
-		color: #ffffff;
-	}
-
-	.django-btn:hover:not(:disabled) {
-		background: #1177bb;
-		border-color: #1890d5;
-	}
-
 	.superuser-btn {
-		background: #44a047;
-		border-color: #5cb85c;
+		background: oklch(0.527 0.154 150.069);
+		border-color: oklch(0.527 0.154 150.069);
+		color: white;
 	}
 
 	.superuser-btn:hover:not(:disabled) {
-		background: #5cb85c;
-		border-color: #6ec071;
+		background: oklch(0.577 0.174 150.069);
+		border-color: oklch(0.577 0.174 150.069);
+	}
+
+	.clear-btn {
+		background: transparent;
+		border-color: var(--border);
+		color: var(--muted-foreground);
+	}
+
+	.clear-btn:hover:not(:disabled) {
+		background: var(--destructive);
+		border-color: var(--destructive);
+		color: white;
 	}
 
 	.console-content {
@@ -165,10 +194,20 @@
 	}
 
 	.empty-state {
-		color: #6a6a6a;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		height: 100%;
+		color: var(--muted-foreground);
 		font-style: italic;
 		padding: 20px;
 		text-align: center;
+	}
+
+	.empty-state p {
+		margin: 0;
 	}
 
 	.log-entry {
@@ -177,8 +216,25 @@
 		word-break: break-word;
 	}
 
+	.log-success {
+		color: oklch(0.696 0.17 162.48);
+	}
+
+	.log-error {
+		color: var(--destructive);
+	}
+
+	.log-warning {
+		color: oklch(0.828 0.189 84.429);
+	}
+
+	.log-info {
+		color: var(--muted-foreground);
+	}
+
 	.log-time {
-		color: #6a6a6a;
+		color: var(--muted-foreground);
+		opacity: 0.7;
 		margin-right: 8px;
 	}
 
@@ -187,19 +243,19 @@
 	}
 
 	.console-content::-webkit-scrollbar {
-		width: 10px;
+		width: 8px;
 	}
 
 	.console-content::-webkit-scrollbar-track {
-		background: #1e1e1e;
+		background: transparent;
 	}
 
 	.console-content::-webkit-scrollbar-thumb {
-		background: #424242;
-		border-radius: 5px;
+		background: var(--border);
+		border-radius: 4px;
 	}
 
 	.console-content::-webkit-scrollbar-thumb:hover {
-		background: #4e4e4e;
+		background: var(--muted-foreground);
 	}
 </style>

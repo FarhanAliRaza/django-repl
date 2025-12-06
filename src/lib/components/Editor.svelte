@@ -1,12 +1,111 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { EditorView, basicSetup } from 'codemirror';
-	import { EditorState } from '@codemirror/state';
+	import { EditorState, Compartment, type Extension } from '@codemirror/state';
 	import { python } from '@codemirror/lang-python';
-	import { oneDark } from '@codemirror/theme-one-dark';
+	import { html } from '@codemirror/lang-html';
+	import { css } from '@codemirror/lang-css';
 	import { keymap } from '@codemirror/view';
 	import { indentWithTab } from '@codemirror/commands';
+	import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 	import { workspaceState } from '$lib/stores/workspace.svelte';
+	import { FileCode, FileText, File } from '@lucide/svelte';
+	import { oneDarkHighlightStyle } from '@codemirror/theme-one-dark';
+	import { syntaxHighlighting } from '@codemirror/language';
+
+	// Language compartment for dynamic switching
+	const languageCompartment = new Compartment();
+
+	// Get language extension based on file extension
+	function getLanguageExtension(filename: string): Extension {
+		if (filename.endsWith('.py')) return python();
+		if (filename.endsWith('.html')) return html();
+		if (filename.endsWith('.css')) return css();
+		return python(); // Default to Python for Django project
+	}
+
+	// Editor state cache - preserves undo history when switching files
+	const editorStateCache = new Map<string, EditorState>();
+
+	// Custom theme matching our shadcn dark colors
+	const shadcnDarkTheme = EditorView.theme(
+		{
+			'&': {
+				color: 'oklch(0.984 0.003 247.858)',
+				backgroundColor: 'oklch(0.129 0.042 264.695)'
+			},
+			'.cm-content': {
+				caretColor: 'oklch(0.984 0.003 247.858)'
+			},
+			'.cm-cursor, .cm-dropCursor': {
+				borderLeftColor: 'oklch(0.984 0.003 247.858)'
+			},
+			'&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
+				{
+					backgroundColor: 'oklch(0.279 0.041 260.031)'
+				},
+			'.cm-panels': {
+				backgroundColor: 'oklch(0.208 0.042 265.755)',
+				color: 'oklch(0.984 0.003 247.858)'
+			},
+			'.cm-panels.cm-panels-top': {
+				borderBottom: '1px solid oklch(1 0 0 / 10%)'
+			},
+			'.cm-panels.cm-panels-bottom': {
+				borderTop: '1px solid oklch(1 0 0 / 10%)'
+			},
+			'.cm-searchMatch': {
+				backgroundColor: 'oklch(0.828 0.189 84.429 / 25%)',
+				outline: '1px solid oklch(0.828 0.189 84.429 / 40%)'
+			},
+			'.cm-searchMatch.cm-searchMatch-selected': {
+				backgroundColor: 'oklch(0.488 0.243 264.376 / 30%)'
+			},
+			'.cm-activeLine': {
+				backgroundColor: 'oklch(0.279 0.041 260.031 / 40%)'
+			},
+			'.cm-selectionMatch': {
+				backgroundColor: 'oklch(0.279 0.041 260.031 / 50%)'
+			},
+			'&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket': {
+				backgroundColor: 'oklch(0.488 0.243 264.376 / 25%)',
+				outline: '1px solid oklch(0.488 0.243 264.376 / 50%)'
+			},
+			'.cm-gutters': {
+				backgroundColor: 'oklch(0.129 0.042 264.695)',
+				color: 'oklch(0.704 0.04 256.788)',
+				border: 'none',
+				borderRight: '1px solid oklch(1 0 0 / 10%)'
+			},
+			'.cm-activeLineGutter': {
+				backgroundColor: 'oklch(0.279 0.041 260.031 / 40%)'
+			},
+			'.cm-foldPlaceholder': {
+				backgroundColor: 'transparent',
+				border: 'none',
+				color: 'oklch(0.704 0.04 256.788)'
+			},
+			'.cm-tooltip': {
+				border: '1px solid oklch(1 0 0 / 10%)',
+				backgroundColor: 'oklch(0.208 0.042 265.755)'
+			},
+			'.cm-tooltip .cm-tooltip-arrow:before': {
+				borderTopColor: 'transparent',
+				borderBottomColor: 'transparent'
+			},
+			'.cm-tooltip .cm-tooltip-arrow:after': {
+				borderTopColor: 'oklch(0.208 0.042 265.755)',
+				borderBottomColor: 'oklch(0.208 0.042 265.755)'
+			},
+			'.cm-tooltip-autocomplete': {
+				'& > ul > li[aria-selected]': {
+					backgroundColor: 'oklch(0.279 0.041 260.031)',
+					color: 'oklch(0.984 0.003 247.858)'
+				}
+			}
+		},
+		{ dark: true }
+	);
 
 	// Dispatch custom event to trigger run
 	function triggerRun() {
@@ -28,32 +127,60 @@
 
 		// Update editor if: file name changed OR reload trigger changed
 		if (editorView && file && (file !== lastLoadedFile || reloadTrigger !== lastReloadTrigger)) {
-			const content = files[file] || '';
-			lastLoadedFile = file;
-			lastReloadTrigger = reloadTrigger; // Remember this trigger value
+			// Save current state to cache before switching
+			if (lastLoadedFile) {
+				editorStateCache.set(lastLoadedFile, editorView.state);
+			}
 
-			editorView.dispatch({
-				changes: {
-					from: 0,
-					to: editorView.state.doc.length,
-					insert: content
-				},
-				selection: { anchor: 0, head: 0 }
-			});
+			const previousFile = lastLoadedFile;
+			lastLoadedFile = file;
+			lastReloadTrigger = reloadTrigger;
+
+			// Check if we have a cached state for the new file
+			const cachedState = editorStateCache.get(file);
+
+			if (cachedState && reloadTrigger === lastReloadTrigger) {
+				// Restore cached state (preserves undo history)
+				editorView.setState(cachedState);
+			} else {
+				// Load fresh content
+				const content = files[file] || '';
+				editorView.dispatch({
+					changes: {
+						from: 0,
+						to: editorView.state.doc.length,
+						insert: content
+					},
+					selection: { anchor: 0, head: 0 }
+				});
+			}
+
+			// Switch language mode if file type changed
+			const prevExt = previousFile.split('.').pop();
+			const newExt = file.split('.').pop();
+			if (prevExt !== newExt) {
+				editorView.dispatch({
+					effects: languageCompartment.reconfigure(getLanguageExtension(file))
+				});
+			}
 		}
 	});
 
 	onMount(() => {
-		const initialContent = workspaceState.files[workspaceState.currentFile] || '';
-		lastLoadedFile = workspaceState.currentFile;
+		const initialFile = workspaceState.currentFile;
+		const initialContent = workspaceState.files[initialFile] || '';
+		lastLoadedFile = initialFile;
 
 		const state = EditorState.create({
 			doc: initialContent,
 			extensions: [
 				basicSetup,
-				python(),
-				oneDark,
+				languageCompartment.of(getLanguageExtension(initialFile)),
+				shadcnDarkTheme,
+				syntaxHighlighting(oneDarkHighlightStyle),
+				highlightSelectionMatches(),
 				keymap.of([
+					...searchKeymap,
 					indentWithTab,
 					{
 						key: 'Mod-s',
@@ -82,6 +209,15 @@
 						overflow: 'auto',
 						fontFamily: "'Fira Code', 'Consolas', monospace"
 					}
+				}),
+				// Disable Grammarly, spell check, and other browser extensions
+				EditorView.contentAttributes.of({
+					'data-gramm': 'false',
+					'data-gramm_editor': 'false',
+					'data-enable-grammarly': 'false',
+					spellcheck: 'false',
+					autocorrect: 'off',
+					autocapitalize: 'off'
 				})
 			]
 		});
@@ -96,6 +232,7 @@
 				clearTimeout(updateTimeout);
 			}
 			editorView?.destroy();
+			editorStateCache.clear();
 		};
 	});
 
@@ -109,7 +246,19 @@
 
 <div class="editor-wrapper">
 	<div class="editor-header">
-		<span class="file-name">{workspaceState.currentFile}</span>
+		<div class="file-tab">
+			<span class="file-icon">
+				{#if workspaceState.currentFile.endsWith('.py')}
+					<FileCode class="size-4 text-blue-400" />
+				{:else if workspaceState.currentFile.endsWith('.html')}
+					<FileText class="size-4 text-orange-400" />
+				{:else}
+					<File class="size-4 text-muted-foreground" />
+				{/if}
+			</span>
+			<span class="file-name">{workspaceState.currentFile.split('/').pop()}</span>
+		</div>
+		<span class="file-path">{workspaceState.currentFile}</span>
 	</div>
 	<div class="editor-container" bind:this={editorElement}></div>
 </div>
@@ -119,20 +268,44 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-		background: #282c34;
+		background: var(--background);
 	}
 
 	.editor-header {
-		padding: 8px 16px;
-		background: #21252b;
-		border-bottom: 1px solid #181a1f;
-		color: #abb2bf;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 16px 0 0;
+		background: var(--card);
+		border-bottom: 1px solid var(--border);
+		color: var(--muted-foreground);
 		font-size: 13px;
 		font-family: system-ui, -apple-system, sans-serif;
 	}
 
+	.file-tab {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 16px;
+		background: var(--background);
+		border-right: 1px solid var(--border);
+	}
+
+	.file-icon {
+		display: flex;
+		align-items: center;
+	}
+
 	.file-name {
-		color: #61afef;
+		color: var(--foreground);
+		font-weight: 500;
+	}
+
+	.file-path {
+		font-size: 12px;
+		color: var(--muted-foreground);
+		font-family: 'Consolas', 'Monaco', monospace;
 	}
 
 	.editor-container {

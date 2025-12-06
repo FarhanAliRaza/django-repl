@@ -1,5 +1,14 @@
 <script lang="ts">
 	import type { FileNode } from '$lib/types';
+	import {
+		Folder,
+		FolderOpen,
+		FileCode,
+		FileText,
+		File,
+		ChevronRight,
+		ChevronDown
+	} from '@lucide/svelte';
 
 	interface Props {
 		node: FileNode;
@@ -14,31 +23,34 @@
 	let { node, depth, expandedDirs, currentFile, toggleDir, selectFile, handleContextMenu }: Props =
 		$props();
 
-	function getIcon(node: FileNode): string {
-		if (node.type === 'directory') {
-			return expandedDirs.has(node.path) ? '📂' : '📁';
-		}
-		if (node.name.endsWith('.py')) return '🐍';
-		if (node.name.endsWith('.html')) return '📄';
-		if (node.name === '.gitkeep') return '👻';
-		return '📝';
-	}
-
 	const isExpanded = $derived(expandedDirs.has(node.path));
 	const isActive = $derived(currentFile === node.path);
-	const paddingLeft = $derived(12 + depth * 16);
+	const paddingLeft = $derived(8 + depth * 16);
 </script>
 
 {#if node.type === 'directory'}
 	<div class="tree-node">
 		<button
-			class="node-button directory"
+			class="node-button directory group"
 			class:expanded={isExpanded}
 			style="padding-left: {paddingLeft}px"
 			onclick={() => toggleDir(node.path)}
 			oncontextmenu={(e) => handleContextMenu(e, node)}
 		>
-			<span class="icon">{getIcon(node)}</span>
+			<span class="chevron">
+				{#if isExpanded}
+					<ChevronDown class="size-3.5 text-muted-foreground" />
+				{:else}
+					<ChevronRight class="size-3.5 text-muted-foreground" />
+				{/if}
+			</span>
+			<span class="icon">
+				{#if isExpanded}
+					<FolderOpen class="size-4 text-amber-400" />
+				{:else}
+					<Folder class="size-4 text-amber-400" />
+				{/if}
+			</span>
 			<span class="name">{node.name}</span>
 		</button>
 		{#if isExpanded && node.children}
@@ -57,13 +69,23 @@
 	</div>
 {:else}
 	<button
-		class="node-button file"
+		class="node-button file group"
 		class:active={isActive}
-		style="padding-left: {paddingLeft}px"
+		style="padding-left: {paddingLeft + 18}px"
 		onclick={() => selectFile(node.path)}
 		oncontextmenu={(e) => handleContextMenu(e, node)}
 	>
-		<span class="icon">{getIcon(node)}</span>
+		<span class="icon">
+			{#if node.name.endsWith('.py')}
+				<FileCode class="size-4 text-blue-400" />
+			{:else if node.name.endsWith('.html')}
+				<FileText class="size-4 text-orange-400" />
+			{:else if node.name === '.gitkeep'}
+				<File class="size-4 text-muted-foreground/50" />
+			{:else}
+				<File class="size-4 text-muted-foreground" />
+			{/if}
+		</span>
 		<span class="name">{node.name}</span>
 	</button>
 {/if}
@@ -78,28 +100,40 @@
 		display: flex;
 		align-items: center;
 		width: 100%;
-		padding: 4px 12px;
+		padding: 5px 8px;
 		background: transparent;
 		border: none;
-		color: #cccccc;
+		color: var(--foreground);
 		cursor: pointer;
 		font-size: 13px;
 		text-align: left;
-		transition: background 0.1s;
+		transition: background 0.15s ease;
+		border-radius: 4px;
+		margin: 1px 4px;
+		width: calc(100% - 8px);
 	}
 
 	.node-button:hover {
-		background: #2a2d2e;
+		background: var(--accent);
 	}
 
 	.node-button.active {
-		background: #094771;
-		color: #ffffff;
+		background: var(--primary);
+		color: var(--primary-foreground);
+	}
+
+	.chevron {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin-right: 2px;
+		flex-shrink: 0;
 	}
 
 	.icon {
-		margin-right: 6px;
-		font-size: 14px;
+		display: flex;
+		align-items: center;
+		margin-right: 8px;
 		flex-shrink: 0;
 	}
 

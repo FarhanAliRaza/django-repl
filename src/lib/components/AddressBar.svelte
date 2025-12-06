@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { pathState } from '$lib/stores/path-state.svelte';
+	import { Lock, RefreshCw, Globe } from '@lucide/svelte';
 
 	let inputValue = $state(pathState.currentPath);
 
@@ -34,19 +35,21 @@
 </script>
 
 <div class="address-bar">
-	<span class="lock-icon">🔒</span>
-	<span class="host">localhost:8000</span>
-	<input
-		type="text"
-		class="path-input"
-		bind:value={inputValue}
-		onkeydown={handleKeydown}
-		placeholder="/"
-	/>
+	<div class="url-container">
+		<span class="lock-icon">
+			<Lock class="size-3.5 text-emerald-500" />
+		</span>
+		<span class="host">localhost:8000</span>
+		<input
+			type="text"
+			class="path-input"
+			bind:value={inputValue}
+			onkeydown={handleKeydown}
+			placeholder="/"
+		/>
+	</div>
 	<button class="refresh-btn" onclick={handleRefresh} title="Reload">
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-			<path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-		</svg>
+		<RefreshCw class="size-4" />
 	</button>
 </div>
 
@@ -56,55 +59,72 @@
 		align-items: center;
 		gap: 8px;
 		padding: 8px 12px;
-		background: #f5f5f5;
-		border-bottom: 1px solid #d4d4d4;
+		background: #f8f9fa;
+		border-bottom: 1px solid #e5e7eb;
 		font-family: system-ui, -apple-system, sans-serif;
 		font-size: 13px;
 	}
 
+	.url-container {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		background: white;
+		border: 1px solid #e5e7eb;
+		border-radius: 8px;
+		padding: 6px 12px;
+		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+	}
+
+	.url-container:focus-within {
+		border-color: #3b82f6;
+		box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+	}
+
 	.lock-icon {
-		font-size: 14px;
-		opacity: 0.6;
+		display: flex;
+		align-items: center;
 	}
 
 	.host {
-		color: #666;
+		color: #6b7280;
 		font-weight: 500;
+		font-size: 13px;
 	}
 
 	.path-input {
 		flex: 1;
 		border: none;
-		background: white;
-		padding: 6px 10px;
-		border-radius: 4px;
+		background: transparent;
+		padding: 2px 0;
 		font-size: 13px;
 		font-family: 'Consolas', 'Monaco', monospace;
 		outline: none;
-		border: 1px solid #d4d4d4;
+		color: #111827;
 	}
 
-	.path-input:focus {
-		border-color: #007acc;
-		box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.1);
+	.path-input::placeholder {
+		color: #9ca3af;
 	}
 
 	.refresh-btn {
 		background: transparent;
-		border: none;
-		padding: 6px;
+		border: 1px solid #e5e7eb;
+		padding: 8px;
 		cursor: pointer;
-		color: #666;
+		color: #6b7280;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		border-radius: 4px;
-		transition: all 0.2s;
+		border-radius: 8px;
+		transition: all 0.15s ease;
 	}
 
 	.refresh-btn:hover {
-		background: #e4e4e4;
-		color: #333;
+		background: #f3f4f6;
+		color: #374151;
+		border-color: #d1d5db;
 	}
 
 	.refresh-btn:active {

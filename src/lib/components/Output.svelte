@@ -6,6 +6,7 @@
 	import AddressBar from './AddressBar.svelte';
 	import { srcdocTemplate } from './srcdoc-template';
 	import * as Resizable from '$lib/components/ui/resizable/index.js';
+	import { Rocket, AlertCircle } from '@lucide/svelte';
 
 	interface Props {
 		onRunMigrations?: () => void;
@@ -102,12 +103,17 @@
 						></iframe>
 					{:else if executionState.executionResult?.error}
 						<div class="error-display">
-							<h3>Error</h3>
+							<div class="error-header">
+								<AlertCircle class="size-5" />
+								<h3>Error</h3>
+							</div>
 							<pre>{executionState.executionResult.error}</pre>
 						</div>
 					{:else}
 						<div class="empty-state">
-							<div class="empty-icon">🚀</div>
+							<div class="empty-icon">
+								<Rocket class="size-16 text-muted-foreground/30" />
+							</div>
 							<h3>Ready to Run</h3>
 							<p>Click the "Run" button to execute your Django application.</p>
 						</div>
@@ -126,7 +132,7 @@
 	.output {
 		height: 100%;
 		width: 100%;
-		background: #1e1e1e;
+		background: var(--background);
 	}
 
 	.preview {
@@ -157,50 +163,60 @@
 		align-items: center;
 		justify-content: center;
 		height: 100%;
-		color: #6a6a6a;
+		background: var(--background);
+		color: var(--muted-foreground);
 		padding: 40px;
 		text-align: center;
 	}
 
 	.empty-icon {
-		font-size: 64px;
 		margin-bottom: 20px;
-		opacity: 0.5;
 	}
 
 	.empty-state h3 {
-		color: #abb2bf;
+		color: var(--foreground);
 		margin: 0 0 10px 0;
 		font-size: 18px;
+		font-weight: 600;
 	}
 
 	.empty-state p {
-		color: #6a6a6a;
+		color: var(--muted-foreground);
 		margin: 0;
 		font-size: 14px;
 	}
 
 	.error-display {
-		padding: 20px;
-		color: #f48771;
-		background: #1e1e1e;
+		padding: 24px;
+		color: var(--destructive);
+		background: var(--background);
 		height: 100%;
 		overflow-y: auto;
 	}
 
+	.error-header {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-bottom: 16px;
+	}
+
 	.error-display h3 {
-		margin-top: 0;
-		color: #f48771;
+		margin: 0;
+		color: var(--destructive);
+		font-size: 16px;
+		font-weight: 600;
 	}
 
 	.error-display pre {
-		background: #252526;
-		padding: 15px;
-		border-radius: 4px;
-		border-left: 3px solid #f48771;
+		background: var(--card);
+		padding: 16px;
+		border-radius: var(--radius-md);
+		border-left: 3px solid var(--destructive);
 		overflow-x: auto;
 		font-family: 'Consolas', 'Monaco', monospace;
 		font-size: 13px;
 		line-height: 1.6;
+		color: var(--foreground);
 	}
 </style>

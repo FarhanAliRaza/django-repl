@@ -10,7 +10,7 @@
 	import * as Resizable from '$lib/components/ui/resizable/index.js';
 	import { Button } from '$lib/components/ui/button';
 	import { pathState } from '$lib/stores/path-state.svelte';
-	import { RefreshCw, Play, Link2 } from '@lucide/svelte';
+	import { RefreshCw, Play, Link2, Github, LoaderCircle, CircleCheck, Clock } from '@lucide/svelte';
 	import { WorkerPool } from '$lib/worker-pool';
 	import type { HttpMethod } from '$lib/types';
 	import { shareState } from '$lib/stores/share.svelte';
@@ -301,7 +301,6 @@
 		executionState.startExecution(true);
 
 		const files = workspaceState.getFiles();
-		const currentFileName = workspaceState.currentFile;
 
 		// Compare with last run to see what changed
 		const changedFiles: string[] = [];
@@ -519,50 +518,59 @@
 	}
 </script>
 
-<div class="playground">
+<div class="playground dark">
 	<header class="header">
 		<div class="header-left">
-			<h1>Django Repl</h1>
-			<span class="subtitle">Run Django in your browser</span>
+			<div class="logo">
+				<svg class="django-icon" viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+					<path d="M11.146 0h3.924v18.166c-2.013.382-3.491.535-5.096.535-4.791 0-7.288-2.166-7.288-6.32 0-4.002 2.65-6.6 6.753-6.6.637 0 1.121.05 1.707.203zm0 9.143a3.894 3.894 0 00-1.325-.204c-1.988 0-3.134 1.223-3.134 3.365 0 2.09 1.096 3.236 3.109 3.236.433 0 .79-.025 1.35-.102V9.142zM21.314 6.06v9.098c0 3.134-.229 4.638-.917 5.937-.637 1.249-1.478 2.039-3.211 2.905l-3.644-1.733c1.733-.815 2.574-1.53 3.109-2.625.561-1.121.739-2.421.739-5.835V6.059h3.924zM17.39.021h3.924v4.026H17.39z"/>
+				</svg>
+				<div class="logo-text">
+					<h1>Django Playground</h1>
+					<span class="subtitle">Run Django in your browser</span>
+				</div>
+			</div>
 		</div>
 		<div class="header-center">
-			<span class="footer-credit">
-				Made with ❤️ by <a
-					href="https://github.com/FarhanAliRaza"
-					target="_blank"
-					rel="noopener noreferrer">Farhan Ali Raza</a
-				>
-			</span>
+			<a
+				class="github-link"
+				href="https://github.com/FarhanAliRaza"
+				target="_blank"
+				rel="noopener noreferrer"
+			>
+				<Github class="size-4" />
+				<span>Made by Farhan Ali Raza</span>
+			</a>
 		</div>
 		<div class="header-right">
 			<div class="status">
 				{#if executionState.replState === ReplState.INITIALIZING}
-					<span class="status-indicator loading"></span>
-					<span>Initializing Python...</span>
+					<LoaderCircle class="size-4 animate-spin text-amber-400" />
+					<span>Initializing...</span>
 				{:else if executionState.replState === ReplState.RUNNING}
-					<span class="status-indicator running"></span>
+					<LoaderCircle class="size-4 animate-spin text-blue-400" />
 					<span>Running...</span>
 				{:else if latestPendingRefresh}
-					<span class="status-indicator pending"></span>
-					<span>Refresh Pending...</span>
+					<Clock class="size-4 text-amber-400" />
+					<span>Pending...</span>
 				{:else if executionState.replState === ReplState.READY}
-					<span class="status-indicator ready"></span>
+					<CircleCheck class="size-4 text-emerald-400" />
 					<span>Ready</span>
 				{:else}
-					<span class="status-indicator ready"></span>
+					<CircleCheck class="size-4 text-emerald-400" />
 					<span>Ready</span>
 				{/if}
 			</div>
 
 			<Button size="default" variant="outline" onclick={handleShare} title="Share project">
 				<Link2 class="size-4" />
-				Share
+				<span class="btn-text">Share</span>
 			</Button>
 
 			{#if executionState.replState === ReplState.READY}
 				<Button size="default" onclick={refreshFiles}>
 					<RefreshCw class="size-4" />
-					Refresh{latestPendingRefresh ? ' (Pending)' : ''}
+					<span class="btn-text">Refresh{latestPendingRefresh ? ' (Pending)' : ''}</span>
 				</Button>
 			{:else}
 				<Button
@@ -572,7 +580,7 @@
 					disabled={executionState.replState !== ReplState.IDLE}
 				>
 					<Play class="size-4" />
-					Run
+					<span class="btn-text">Run</span>
 				</Button>
 			{/if}
 		</div>
@@ -612,6 +620,7 @@
 
 	{#if showShareToast}
 		<div class="toast">
+			<CircleCheck class="size-5" />
 			{shareToastMessage}
 		</div>
 	{/if}
@@ -628,8 +637,8 @@
 		display: flex;
 		flex-direction: column;
 		height: 100vh;
-		background: #1e1e1e;
-		color: #d4d4d4;
+		background: var(--background);
+		color: var(--foreground);
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 	}
 
@@ -637,18 +646,45 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: 12px 24px;
-		background: #2d2d30;
-		border-bottom: 1px solid #3e3e42;
+		padding: 10px 20px;
+		background: var(--card);
+		border-bottom: 1px solid var(--border);
 		flex-shrink: 0;
 		position: relative;
 	}
 
 	.header-left {
 		display: flex;
-		align-items: baseline;
-		gap: 8px;
+		align-items: center;
 		flex: 1;
+	}
+
+	.logo {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.django-icon {
+		color: oklch(0.696 0.17 162.48);
+	}
+
+	.logo-text {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.header h1 {
+		margin: 0;
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--foreground);
+		line-height: 1.2;
+	}
+
+	.subtitle {
+		font-size: 11px;
+		color: var(--muted-foreground);
 	}
 
 	.header-center {
@@ -659,81 +695,55 @@
 		align-items: center;
 	}
 
-	.header h1 {
-		margin: 0;
-		font-size: 18px;
-		font-weight: 600;
-		color: #ffffff;
-	}
-
-	.subtitle {
+	.github-link {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 		font-size: 13px;
-		color: #999;
-	}
-
-	.footer-credit {
-		font-size: 12px;
-		color: #999;
-	}
-
-	.footer-credit a {
-		color: #4ec9b0;
+		color: var(--muted-foreground);
 		text-decoration: none;
-		transition: color 0.2s;
+		padding: 6px 12px;
+		border-radius: var(--radius-md);
+		transition: all 0.15s ease;
 	}
 
-	.footer-credit a:hover {
-		color: #6fd9c0;
+	.github-link:hover {
+		color: var(--foreground);
+		background: var(--accent);
 	}
 
 	.header-right {
 		display: flex;
 		align-items: center;
-		gap: 16px;
+		gap: 12px;
 	}
 
 	.status {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 6px;
 		font-size: 13px;
-		color: #999;
+		color: var(--muted-foreground);
+		padding: 6px 12px;
+		background: var(--secondary);
+		border-radius: var(--radius-md);
 	}
 
-	.status-indicator {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		animation: pulse 2s infinite;
+	.btn-text {
+		margin-left: 2px;
 	}
 
-	.status-indicator.loading {
-		background: #dcdcaa;
-	}
-
-	.status-indicator.running {
-		background: #569cd6;
-		animation: pulse 1s infinite;
-	}
-
-	.status-indicator.ready {
-		background: #4ec9b0;
-		animation: none;
-	}
-
-	.status-indicator.pending {
-		background: #d7ba7d;
-		animation: pulse 1.5s infinite;
-	}
-
-	@keyframes pulse {
-		0%,
-		100% {
-			opacity: 1;
+	@keyframes spin {
+		from {
+			transform: rotate(0deg);
 		}
-		50% {
-			opacity: 0.5;
+		to {
+			transform: rotate(360deg);
 		}
+	}
+
+	:global(.animate-spin) {
+		animation: spin 1s linear infinite;
 	}
 
 	.content {
@@ -768,15 +778,18 @@
 		position: fixed;
 		bottom: 24px;
 		right: 24px;
-		background: #4ec9b0;
-		color: #1e1e1e;
-		padding: 12px 20px;
-		border-radius: 6px;
+		background: oklch(0.696 0.17 162.48);
+		color: white;
+		padding: 14px 20px;
+		border-radius: var(--radius-lg);
 		font-size: 14px;
 		font-weight: 500;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 		animation: slideIn 0.3s ease-out;
 		z-index: 1000;
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 
 	@keyframes slideIn {
@@ -787,6 +800,21 @@
 		to {
 			transform: translateY(0);
 			opacity: 1;
+		}
+	}
+
+	/* Responsive */
+	@media (max-width: 768px) {
+		.header-center {
+			display: none;
+		}
+
+		.btn-text {
+			display: none;
+		}
+
+		.subtitle {
+			display: none;
 		}
 	}
 </style>

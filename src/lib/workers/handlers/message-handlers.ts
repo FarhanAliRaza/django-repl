@@ -163,19 +163,12 @@ export async function handleCreateSuperuser(
 
 export async function handleGetDatabase(): Promise<WorkerResponse> {
 	const dbData = await getDatabaseFromVirtualFS();
-	if (dbData) {
-		return {
-			type: 'database',
-			payload: { dbData }
-		};
-	} else {
-		return {
-			type: 'error',
-			payload: {
-				message: 'Failed to get database'
-			}
-		};
-	}
+	// Always return 'database' type - null dbData means no database exists yet
+	// This is expected on first run before migrations, so not an error
+	return {
+		type: 'database',
+		payload: { dbData: dbData || null }
+	};
 }
 
 export async function handleSetDatabase(dbData: Uint8Array): Promise<WorkerResponse> {
