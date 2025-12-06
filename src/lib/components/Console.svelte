@@ -58,46 +58,56 @@
 	});
 </script>
 
-<div class="console">
-	<div class="console-header">
-		<div class="console-title">
+<div class="flex h-full flex-col bg-background text-foreground">
+	<div class="flex shrink-0 items-center justify-between border-b border-border bg-card px-3 py-2">
+		<div class="flex items-center gap-2 text-sm text-muted-foreground">
 			<Terminal class="size-4" />
 			<span>Console</span>
 		</div>
-		<div class="console-actions">
-			<button class="action-btn" onclick={handleMakeMigrations} {disabled}>
-				<DatabaseBackup class="size-3.5" />
-				<span>Make Migrations</span>
-			</button>
-			<button class="action-btn" onclick={handleMigrate} {disabled}>
-				<Database class="size-3.5" />
-				<span>Migrate</span>
+		<div class="flex gap-1.5">
+			<button
+				class="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+				onclick={handleMakeMigrations}
+				{disabled}
+			>
+				<DatabaseBackup class="size-3" />
+				<span class="hidden sm:inline">Make Migrations</span>
 			</button>
 			<button
-				class="action-btn superuser-btn"
+				class="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+				onclick={handleMigrate}
+				{disabled}
+			>
+				<Database class="size-3" />
+				<span class="hidden sm:inline">Migrate</span>
+			</button>
+			<button
+				class="flex items-center gap-1.5 rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
 				onclick={handleCreateSuperuser}
 				{disabled}
 			>
-				<UserPlus class="size-3.5" />
-				<span>Create Superuser</span>
+				<UserPlus class="size-3" />
+				<span class="hidden sm:inline">Superuser</span>
 			</button>
-			<button class="action-btn clear-btn" onclick={clearConsole}>
-				<Trash2 class="size-3.5" />
-				<span>Clear</span>
+			<button
+				class="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-destructive hover:text-white"
+				onclick={clearConsole}
+			>
+				<Trash2 class="size-3" />
 			</button>
 		</div>
 	</div>
-	<div class="console-content">
+	<div class="flex-1 overflow-y-auto p-3 font-mono text-sm leading-relaxed">
 		{#if executionState.logs.length === 0}
-			<div class="empty-state">
+			<div class="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
 				<Terminal class="size-8 opacity-40" />
-				<p>No logs yet. Run your Django app to see output.</p>
+				<p class="text-sm">No logs yet</p>
 			</div>
 		{:else}
 			{#each executionState.logs as log, index (index)}
-				<div class="log-entry {getLogClass(log.type)}">
-					<span class="log-time">[{formatTime(log.timestamp)}]</span>
-					<span class="log-message">{log.message}</span>
+				<div class="my-1 whitespace-pre-wrap break-words {getLogClass(log.type)}">
+					<span class="mr-2 text-muted-foreground/70">[{formatTime(log.timestamp)}]</span>
+					<span>{log.message}</span>
 				</div>
 			{/each}
 		{/if}
@@ -105,157 +115,8 @@
 </div>
 
 <style>
-	.console {
-		display: flex;
-		flex-direction: column;
-		height: 100%;
-		background: var(--background);
-		color: var(--foreground);
-	}
-
-	.console-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 8px 12px;
-		background: var(--card);
-		border-bottom: 1px solid var(--border);
-		font-size: 13px;
-	}
-
-	.console-title {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-weight: 500;
-		color: var(--muted-foreground);
-	}
-
-	.console-actions {
-		display: flex;
-		gap: 6px;
-	}
-
-	.action-btn {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		background: var(--secondary);
-		border: 1px solid var(--border);
-		color: var(--secondary-foreground);
-		padding: 5px 10px;
-		border-radius: var(--radius-md);
-		cursor: pointer;
-		font-size: 12px;
-		font-weight: 500;
-		transition: all 0.15s ease;
-	}
-
-	.action-btn:hover:not(:disabled) {
-		background: var(--accent);
-		border-color: var(--border);
-	}
-
-	.action-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.superuser-btn {
-		background: oklch(0.527 0.154 150.069);
-		border-color: oklch(0.527 0.154 150.069);
-		color: white;
-	}
-
-	.superuser-btn:hover:not(:disabled) {
-		background: oklch(0.577 0.174 150.069);
-		border-color: oklch(0.577 0.174 150.069);
-	}
-
-	.clear-btn {
-		background: transparent;
-		border-color: var(--border);
-		color: var(--muted-foreground);
-	}
-
-	.clear-btn:hover:not(:disabled) {
-		background: var(--destructive);
-		border-color: var(--destructive);
-		color: white;
-	}
-
-	.console-content {
-		flex: 1;
-		overflow-y: auto;
-		padding: 12px;
-		font-family: 'Consolas', 'Monaco', monospace;
-		font-size: 13px;
-		line-height: 1.6;
-	}
-
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 12px;
-		height: 100%;
-		color: var(--muted-foreground);
-		font-style: italic;
-		padding: 20px;
-		text-align: center;
-	}
-
-	.empty-state p {
-		margin: 0;
-	}
-
-	.log-entry {
-		margin: 4px 0;
-		white-space: pre-wrap;
-		word-break: break-word;
-	}
-
-	.log-success {
-		color: oklch(0.696 0.17 162.48);
-	}
-
-	.log-error {
-		color: var(--destructive);
-	}
-
-	.log-warning {
-		color: oklch(0.828 0.189 84.429);
-	}
-
-	.log-info {
-		color: var(--muted-foreground);
-	}
-
-	.log-time {
-		color: var(--muted-foreground);
-		opacity: 0.7;
-		margin-right: 8px;
-	}
-
-	.log-message {
-		font-family: 'Consolas', 'Monaco', monospace;
-	}
-
-	.console-content::-webkit-scrollbar {
-		width: 8px;
-	}
-
-	.console-content::-webkit-scrollbar-track {
-		background: transparent;
-	}
-
-	.console-content::-webkit-scrollbar-thumb {
-		background: var(--border);
-		border-radius: 4px;
-	}
-
-	.console-content::-webkit-scrollbar-thumb:hover {
-		background: var(--muted-foreground);
-	}
+	.log-success { color: oklch(0.696 0.17 162.48); }
+	.log-error { color: var(--destructive); }
+	.log-warning { color: oklch(0.828 0.189 84.429); }
+	.log-info { color: var(--muted-foreground); }
 </style>

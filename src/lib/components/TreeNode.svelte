@@ -29,29 +29,28 @@
 </script>
 
 {#if node.type === 'directory'}
-	<div class="tree-node">
+	<div class="flex flex-col">
 		<button
-			class="node-button directory group"
-			class:expanded={isExpanded}
+			class="mx-1 my-px flex w-[calc(100%-8px)] items-center rounded py-1 pr-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
 			style="padding-left: {paddingLeft}px"
 			onclick={() => toggleDir(node.path)}
 			oncontextmenu={(e) => handleContextMenu(e, node)}
 		>
-			<span class="chevron">
+			<span class="mr-0.5 flex shrink-0 items-center justify-center">
 				{#if isExpanded}
 					<ChevronDown class="size-3.5 text-muted-foreground" />
 				{:else}
 					<ChevronRight class="size-3.5 text-muted-foreground" />
 				{/if}
 			</span>
-			<span class="icon">
+			<span class="mr-2 flex shrink-0 items-center">
 				{#if isExpanded}
 					<FolderOpen class="size-4 text-amber-400" />
 				{:else}
 					<Folder class="size-4 text-amber-400" />
 				{/if}
 			</span>
-			<span class="name">{node.name}</span>
+			<span class="flex-1 truncate">{node.name}</span>
 		</button>
 		{#if isExpanded && node.children}
 			{#each node.children.filter((child) => child.name !== '.gitkeep') as child}
@@ -69,13 +68,12 @@
 	</div>
 {:else}
 	<button
-		class="node-button file group"
-		class:active={isActive}
+		class="mx-1 my-px flex w-[calc(100%-8px)] items-center rounded py-1 pr-2 text-left text-sm transition-colors {isActive ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-accent'}"
 		style="padding-left: {paddingLeft + 18}px"
 		onclick={() => selectFile(node.path)}
 		oncontextmenu={(e) => handleContextMenu(e, node)}
 	>
-		<span class="icon">
+		<span class="mr-2 flex shrink-0 items-center">
 			{#if node.name.endsWith('.py')}
 				<FileCode class="size-4 text-blue-400" />
 			{:else if node.name.endsWith('.html')}
@@ -86,61 +84,6 @@
 				<File class="size-4 text-muted-foreground" />
 			{/if}
 		</span>
-		<span class="name">{node.name}</span>
+		<span class="flex-1 truncate">{node.name}</span>
 	</button>
 {/if}
-
-<style>
-	.tree-node {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.node-button {
-		display: flex;
-		align-items: center;
-		width: 100%;
-		padding: 5px 8px;
-		background: transparent;
-		border: none;
-		color: var(--foreground);
-		cursor: pointer;
-		font-size: 13px;
-		text-align: left;
-		transition: background 0.15s ease;
-		border-radius: 4px;
-		margin: 1px 4px;
-		width: calc(100% - 8px);
-	}
-
-	.node-button:hover {
-		background: var(--accent);
-	}
-
-	.node-button.active {
-		background: var(--primary);
-		color: var(--primary-foreground);
-	}
-
-	.chevron {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin-right: 2px;
-		flex-shrink: 0;
-	}
-
-	.icon {
-		display: flex;
-		align-items: center;
-		margin-right: 8px;
-		flex-shrink: 0;
-	}
-
-	.name {
-		flex: 1;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-</style>

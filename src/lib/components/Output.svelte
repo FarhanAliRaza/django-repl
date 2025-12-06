@@ -87,35 +87,35 @@
 	});
 </script>
 
-<div class="output">
+<div class="h-full w-full bg-background">
 	<Resizable.PaneGroup direction="vertical">
 		<Resizable.Pane defaultSize={70}>
-			<div class="preview">
+			<div class="flex h-full w-full flex-col overflow-hidden bg-white">
 				<AddressBar />
-				<div class="preview-content">
+				<div class="relative flex-1 overflow-hidden">
 					{#if hasHtml}
 						<iframe
 							bind:this={iframeElement}
 							title="Django Output"
 							srcdoc={srcdocTemplate}
 							sandbox="allow-scripts allow-forms allow-same-origin"
-							class="preview-frame"
+							class="h-full w-full border-none bg-white"
 						></iframe>
 					{:else if executionState.executionResult?.error}
-						<div class="error-display">
-							<div class="error-header">
+						<div class="h-full overflow-y-auto bg-background p-6 text-destructive">
+							<div class="mb-4 flex items-center gap-2">
 								<AlertCircle class="size-5" />
-								<h3>Error</h3>
+								<h3 class="text-base font-semibold">Error</h3>
 							</div>
-							<pre>{executionState.executionResult.error}</pre>
+							<pre class="overflow-x-auto rounded-md border-l-2 border-destructive bg-card p-4 font-mono text-sm leading-relaxed text-foreground">{executionState.executionResult.error}</pre>
 						</div>
 					{:else}
-						<div class="empty-state">
-							<div class="empty-icon">
-								<Rocket class="size-16 text-muted-foreground/30" />
+						<div class="flex h-full flex-col items-center justify-center gap-5 bg-background p-10 text-center">
+							<Rocket class="size-12 text-muted-foreground/30" />
+							<div>
+								<h3 class="mb-2 text-lg font-semibold text-foreground">Ready to Run</h3>
+								<p class="text-sm text-muted-foreground">Click the "Run" button to execute your Django application.</p>
 							</div>
-							<h3>Ready to Run</h3>
-							<p>Click the "Run" button to execute your Django application.</p>
 						</div>
 					{/if}
 				</div>
@@ -127,96 +127,3 @@
 		</Resizable.Pane>
 	</Resizable.PaneGroup>
 </div>
-
-<style>
-	.output {
-		height: 100%;
-		width: 100%;
-		background: var(--background);
-	}
-
-	.preview {
-		height: 100%;
-		width: 100%;
-		background: #ffffff;
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-	}
-
-	.preview-content {
-		flex: 1;
-		position: relative;
-		overflow: hidden;
-	}
-
-	.preview-frame {
-		width: 100%;
-		height: 100%;
-		border: none;
-		background: white;
-	}
-
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		height: 100%;
-		background: var(--background);
-		color: var(--muted-foreground);
-		padding: 40px;
-		text-align: center;
-	}
-
-	.empty-icon {
-		margin-bottom: 20px;
-	}
-
-	.empty-state h3 {
-		color: var(--foreground);
-		margin: 0 0 10px 0;
-		font-size: 18px;
-		font-weight: 600;
-	}
-
-	.empty-state p {
-		color: var(--muted-foreground);
-		margin: 0;
-		font-size: 14px;
-	}
-
-	.error-display {
-		padding: 24px;
-		color: var(--destructive);
-		background: var(--background);
-		height: 100%;
-		overflow-y: auto;
-	}
-
-	.error-header {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		margin-bottom: 16px;
-	}
-
-	.error-display h3 {
-		margin: 0;
-		color: var(--destructive);
-		font-size: 16px;
-		font-weight: 600;
-	}
-
-	.error-display pre {
-		background: var(--card);
-		padding: 16px;
-		border-radius: var(--radius-md);
-		border-left: 3px solid var(--destructive);
-		overflow-x: auto;
-		font-family: 'Consolas', 'Monaco', monospace;
-		font-size: 13px;
-		line-height: 1.6;
-		color: var(--foreground);
-	}
-</style>

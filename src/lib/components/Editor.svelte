@@ -244,75 +244,24 @@
 	});
 </script>
 
-<div class="editor-wrapper">
-	<div class="editor-header">
-		<div class="file-tab">
-			<span class="file-icon">
-				{#if workspaceState.currentFile.endsWith('.py')}
-					<FileCode class="size-4 text-blue-400" />
-				{:else if workspaceState.currentFile.endsWith('.html')}
-					<FileText class="size-4 text-orange-400" />
-				{:else}
-					<File class="size-4 text-muted-foreground" />
-				{/if}
-			</span>
-			<span class="file-name">{workspaceState.currentFile.split('/').pop()}</span>
+<div class="flex h-full flex-col bg-background">
+	<div class="flex h-10 shrink-0 items-center justify-between border-b border-border bg-card pr-4 text-sm">
+		<div class="flex items-center gap-2 border-r border-border bg-background px-4 py-2">
+			{#if workspaceState.currentFile.endsWith('.py')}
+				<FileCode class="size-4 text-blue-400" />
+			{:else if workspaceState.currentFile.endsWith('.html')}
+				<FileText class="size-4 text-orange-400" />
+			{:else}
+				<File class="size-4 text-muted-foreground" />
+			{/if}
+			<span class="font-medium text-foreground">{workspaceState.currentFile.split('/').pop()}</span>
 		</div>
-		<span class="file-path">{workspaceState.currentFile}</span>
+		<span class="font-mono text-xs text-muted-foreground">{workspaceState.currentFile}</span>
 	</div>
-	<div class="editor-container" bind:this={editorElement}></div>
+	<div class="editor-container flex-1 overflow-hidden" bind:this={editorElement}></div>
 </div>
 
 <style>
-	.editor-wrapper {
-		display: flex;
-		flex-direction: column;
-		height: 100%;
-		background: var(--background);
-	}
-
-	.editor-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 0 16px 0 0;
-		background: var(--card);
-		border-bottom: 1px solid var(--border);
-		color: var(--muted-foreground);
-		font-size: 13px;
-		font-family: system-ui, -apple-system, sans-serif;
-	}
-
-	.file-tab {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 10px 16px;
-		background: var(--background);
-		border-right: 1px solid var(--border);
-	}
-
-	.file-icon {
-		display: flex;
-		align-items: center;
-	}
-
-	.file-name {
-		color: var(--foreground);
-		font-weight: 500;
-	}
-
-	.file-path {
-		font-size: 12px;
-		color: var(--muted-foreground);
-		font-family: 'Consolas', 'Monaco', monospace;
-	}
-
-	.editor-container {
-		flex: 1;
-		overflow: hidden;
-	}
-
 	.editor-container :global(.cm-editor) {
 		height: 100%;
 	}

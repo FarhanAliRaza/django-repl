@@ -518,87 +518,74 @@
 	}
 </script>
 
-<div class="playground dark">
-	<header class="header">
-		<div class="header-left">
-			<div class="logo">
-				<svg class="django-icon" viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-					<path d="M11.146 0h3.924v18.166c-2.013.382-3.491.535-5.096.535-4.791 0-7.288-2.166-7.288-6.32 0-4.002 2.65-6.6 6.753-6.6.637 0 1.121.05 1.707.203zm0 9.143a3.894 3.894 0 00-1.325-.204c-1.988 0-3.134 1.223-3.134 3.365 0 2.09 1.096 3.236 3.109 3.236.433 0 .79-.025 1.35-.102V9.142zM21.314 6.06v9.098c0 3.134-.229 4.638-.917 5.937-.637 1.249-1.478 2.039-3.211 2.905l-3.644-1.733c1.733-.815 2.574-1.53 3.109-2.625.561-1.121.739-2.421.739-5.835V6.059h3.924zM17.39.021h3.924v4.026H17.39z"/>
-				</svg>
-				<div class="logo-text">
-					<h1>Django Playground</h1>
-					<span class="subtitle">Run Django in your browser</span>
-				</div>
-			</div>
+<div class="flex h-screen flex-col dark">
+	<header class="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4">
+		<div class="flex items-center gap-3">
+			<svg viewBox="0 0 24 24" fill="currentColor" class="size-5 text-emerald-500">
+				<path d="M11.146 0h3.924v18.166c-2.013.382-3.491.535-5.096.535-4.791 0-7.288-2.166-7.288-6.32 0-4.002 2.65-6.6 6.753-6.6.637 0 1.121.05 1.707.203zm0 9.143a3.894 3.894 0 00-1.325-.204c-1.988 0-3.134 1.223-3.134 3.365 0 2.09 1.096 3.236 3.109 3.236.433 0 .79-.025 1.35-.102V9.142zM21.314 6.06v9.098c0 3.134-.229 4.638-.917 5.937-.637 1.249-1.478 2.039-3.211 2.905l-3.644-1.733c1.733-.815 2.574-1.53 3.109-2.625.561-1.121.739-2.421.739-5.835V6.059h3.924zM17.39.021h3.924v4.026H17.39z"/>
+			</svg>
+			<span class="text-sm font-medium text-foreground">Django Playground</span>
 		</div>
-		<div class="header-center">
-			<a
-				class="github-link"
-				href="https://github.com/FarhanAliRaza"
-				target="_blank"
-				rel="noopener noreferrer"
-			>
-				<Github class="size-4" />
-				<span>Made by Farhan Ali Raza</span>
-			</a>
-		</div>
-		<div class="header-right">
-			<div class="status">
+
+		<a
+			class="hidden items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground md:flex"
+			href="https://github.com/FarhanAliRaza"
+			target="_blank"
+			rel="noopener noreferrer"
+		>
+			<Github class="size-3.5" />
+			<span>Farhan Ali Raza</span>
+		</a>
+
+		<div class="flex items-center gap-2">
+			<div class="flex items-center gap-1.5 rounded-md bg-secondary px-2.5 py-1 text-xs text-muted-foreground">
 				{#if executionState.replState === ReplState.INITIALIZING}
-					<LoaderCircle class="size-4 animate-spin text-amber-400" />
-					<span>Initializing...</span>
+					<LoaderCircle class="size-3 animate-spin" />
+					<span>Initializing</span>
 				{:else if executionState.replState === ReplState.RUNNING}
-					<LoaderCircle class="size-4 animate-spin text-blue-400" />
-					<span>Running...</span>
+					<LoaderCircle class="size-3 animate-spin" />
+					<span>Running</span>
 				{:else if latestPendingRefresh}
-					<Clock class="size-4 text-amber-400" />
-					<span>Pending...</span>
-				{:else if executionState.replState === ReplState.READY}
-					<CircleCheck class="size-4 text-emerald-400" />
-					<span>Ready</span>
+					<Clock class="size-3" />
+					<span>Pending</span>
 				{:else}
-					<CircleCheck class="size-4 text-emerald-400" />
+					<CircleCheck class="size-3 text-emerald-500" />
 					<span>Ready</span>
 				{/if}
 			</div>
 
-			<Button size="default" variant="outline" onclick={handleShare} title="Share project">
-				<Link2 class="size-4" />
-				<span class="btn-text">Share</span>
+			<Button size="sm" variant="outline" onclick={handleShare}>
+				<Link2 class="size-3.5" />
+				<span class="hidden sm:inline">Share</span>
 			</Button>
 
 			{#if executionState.replState === ReplState.READY}
-				<Button size="default" onclick={refreshFiles}>
-					<RefreshCw class="size-4" />
-					<span class="btn-text">Refresh{latestPendingRefresh ? ' (Pending)' : ''}</span>
+				<Button size="sm" onclick={refreshFiles}>
+					<RefreshCw class="size-3.5" />
+					<span class="hidden sm:inline">Refresh</span>
 				</Button>
 			{:else}
-				<Button
-					variant="default"
-					size="default"
-					onclick={runCode}
-					disabled={executionState.replState !== ReplState.IDLE}
-				>
-					<Play class="size-4" />
-					<span class="btn-text">Run</span>
+				<Button size="sm" onclick={runCode} disabled={executionState.replState !== ReplState.IDLE}>
+					<Play class="size-3.5" />
+					<span class="hidden sm:inline">Run</span>
 				</Button>
 			{/if}
 		</div>
 	</header>
 
-	<div class="content">
+	<div class="flex-1 overflow-hidden">
 		<Resizable.PaneGroup direction="horizontal">
 			<Resizable.Pane defaultSize={50} minSize={30}>
-				<div class="left-pane">
+				<div class="h-full w-full">
 					<Resizable.PaneGroup direction="horizontal">
 						<Resizable.Pane defaultSize={30} minSize={15}>
-							<div class="file-tree-container">
+							<div class="h-full w-full overflow-hidden">
 								<FileTree />
 							</div>
 						</Resizable.Pane>
 						<Resizable.Handle withHandle={true} />
 						<Resizable.Pane>
-							<div class="editor-container">
+							<div class="h-full w-full overflow-hidden">
 								<Editor />
 							</div>
 						</Resizable.Pane>
@@ -607,7 +594,7 @@
 			</Resizable.Pane>
 			<Resizable.Handle withHandle={true} />
 			<Resizable.Pane defaultSize={50}>
-				<div class="right-pane">
+				<div class="h-full w-full overflow-hidden">
 					<Output
 						onRunMigrations={runMigrations}
 						onMakeMigrations={makeMigrations}
@@ -619,8 +606,8 @@
 	</div>
 
 	{#if showShareToast}
-		<div class="toast">
-			<CircleCheck class="size-5" />
+		<div class="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-md bg-emerald-500 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
+			<CircleCheck class="size-4" />
 			{shareToastMessage}
 		</div>
 	{/if}
@@ -633,188 +620,12 @@
 		overflow: hidden;
 	}
 
-	.playground {
-		display: flex;
-		flex-direction: column;
-		height: 100vh;
-		background: var(--background);
-		color: var(--foreground);
-		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-	}
-
-	.header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 10px 20px;
-		background: var(--card);
-		border-bottom: 1px solid var(--border);
-		flex-shrink: 0;
-		position: relative;
-	}
-
-	.header-left {
-		display: flex;
-		align-items: center;
-		flex: 1;
-	}
-
-	.logo {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-	}
-
-	.django-icon {
-		color: oklch(0.696 0.17 162.48);
-	}
-
-	.logo-text {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.header h1 {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 600;
-		color: var(--foreground);
-		line-height: 1.2;
-	}
-
-	.subtitle {
-		font-size: 11px;
-		color: var(--muted-foreground);
-	}
-
-	.header-center {
-		position: absolute;
-		left: 50%;
-		transform: translateX(-50%);
-		display: flex;
-		align-items: center;
-	}
-
-	.github-link {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		font-size: 13px;
-		color: var(--muted-foreground);
-		text-decoration: none;
-		padding: 6px 12px;
-		border-radius: var(--radius-md);
-		transition: all 0.15s ease;
-	}
-
-	.github-link:hover {
-		color: var(--foreground);
-		background: var(--accent);
-	}
-
-	.header-right {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-	}
-
-	.status {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 13px;
-		color: var(--muted-foreground);
-		padding: 6px 12px;
-		background: var(--secondary);
-		border-radius: var(--radius-md);
-	}
-
-	.btn-text {
-		margin-left: 2px;
-	}
-
 	@keyframes spin {
-		from {
-			transform: rotate(0deg);
-		}
-		to {
-			transform: rotate(360deg);
-		}
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
 	}
 
 	:global(.animate-spin) {
 		animation: spin 1s linear infinite;
-	}
-
-	.content {
-		flex: 1;
-		overflow: hidden;
-	}
-
-	.left-pane {
-		height: 100%;
-		width: 100%;
-	}
-
-	.file-tree-container {
-		height: 100%;
-		width: 100%;
-		overflow: hidden;
-	}
-
-	.editor-container {
-		height: 100%;
-		width: 100%;
-		overflow: hidden;
-	}
-
-	.right-pane {
-		height: 100%;
-		width: 100%;
-		overflow: hidden;
-	}
-
-	.toast {
-		position: fixed;
-		bottom: 24px;
-		right: 24px;
-		background: oklch(0.696 0.17 162.48);
-		color: white;
-		padding: 14px 20px;
-		border-radius: var(--radius-lg);
-		font-size: 14px;
-		font-weight: 500;
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-		animation: slideIn 0.3s ease-out;
-		z-index: 1000;
-		display: flex;
-		align-items: center;
-		gap: 8px;
-	}
-
-	@keyframes slideIn {
-		from {
-			transform: translateY(100px);
-			opacity: 0;
-		}
-		to {
-			transform: translateY(0);
-			opacity: 1;
-		}
-	}
-
-	/* Responsive */
-	@media (max-width: 768px) {
-		.header-center {
-			display: none;
-		}
-
-		.btn-text {
-			display: none;
-		}
-
-		.subtitle {
-			display: none;
-		}
 	}
 </style>
