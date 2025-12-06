@@ -15,14 +15,14 @@ export async function initializePyodide() {
 		const pyodideModule = await import('https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.mjs');
 
 		pyodide = await pyodideModule.loadPyodide({
-			indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/'
+			indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.29.0/full/',
+			// Load micropip during Pyodide initialization for faster startup
+			packages: ['micropip'],
+			// Don't load full stdlib immediately - defer for faster initial load
+			fullStdLib: false
 		});
 
-		log('Pyodide loaded successfully', 'success', 'django');
-
-		// Load micropip for package installation
-		await pyodide.loadPackage('micropip');
-		log('Micropip loaded', 'success', 'django');
+		log('Pyodide and micropip loaded successfully', 'success', 'django');
 
 		return true;
 	} catch (error) {
@@ -42,9 +42,14 @@ export async function installDjango() {
 	}
 
 	try {
-		// First, check if a snapshot exists in IndexedDB
-		// This is more reliable than relying on isFirstLoad flag (which is per-worker)
-		const snapshotExists = await hasSnapshot(DJANGO_VERSION);
+		// Check snapshot and start loading binary packages in parallel
+		// sqlite3 and tzdata are needed regardless of restore or fresh install
+		const [snapshotExists] = await Promise.all([
+			hasSnapshot(DJANGO_VERSION),
+			// Start loading binary packages early - they're always needed
+			pyodide.loadPackage(['sqlite3', 'tzdata'])
+		]);
+		log('Binary packages loaded', 'success', 'django');
 
 		if (snapshotExists && !isFirstLoad) {
 			// Restore from snapshot (fast path) - but only if NOT the first worker
@@ -53,14 +58,6 @@ export async function installDjango() {
 			const restored = await restoreSnapshot(pyodide, DJANGO_VERSION);
 
 			if (restored) {
-				// Still need to load these binary packages (they're not in site-packages)
-				// Load them in parallel for faster initialization
-				log('Loading SQLite3 and tzdata in parallel...', 'info', 'django');
-				await Promise.all([
-					pyodide.loadPackage('sqlite3'),
-					pyodide.loadPackage('tzdata')
-				]);
-
 				// Pre-import Django modules to warm up sys.modules cache
 				// This makes the first view execution much faster
 				log('Pre-importing Django modules...', 'info', 'django');
@@ -87,17 +84,16 @@ os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
 		// 1. No snapshot exists (first worker ever), OR
 		// 2. This is marked as first load (first worker of this session), OR
 		// 3. Snapshot restore failed
-		log('Installing Django and all dependencies in parallel...', 'info', 'django');
+		// Note: sqlite3 and tzdata are already loaded above in parallel with snapshot check
+		log('Installing Django and dependencies in parallel...', 'info', 'django');
 		const micropip = pyodide.pyimport('micropip');
 
-		// Install all packages in parallel for faster initialization
+		// Install Django and its dependencies in parallel
 		// Include Django's dependencies (asgiref, sqlparse) explicitly to avoid sequential resolution
 		await Promise.all([
 			micropip.install('django'),
 			micropip.install('asgiref'),
-			micropip.install('sqlparse'),
-			pyodide.loadPackage('sqlite3'),
-			pyodide.loadPackage('tzdata')
+			micropip.install('sqlparse')
 		]);
 
 		log('All packages installed', 'success', 'django');
